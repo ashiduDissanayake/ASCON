@@ -72,7 +72,7 @@ def encrypt(key: bytes, nonce: bytes, ad: bytes, pt: bytes, trace: bool = False)
     """Encrypt and return ``(ciphertext, 16-byte authentication tag)``."""
     _validate(key, nonce)
     if trace:
-        iv = bytes([1, 0, 0x8C, 0, 0x10, 0, 0])
+        iv = bytes([1, 0, 0x8C, 0x80, 0, 0x10, 0, 0])
         initial_state = [int.from_bytes((iv + key + nonce)[offset:offset + 8], "little") for offset in range(0, 40, 8)]
         print("trace input " + _state_text(initial_state))
         permutation(initial_state, rounds=12, trace=True)

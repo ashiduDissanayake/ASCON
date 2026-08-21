@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import sys
+import argparse
 from pathlib import Path
 from typing import Any
 
@@ -134,6 +135,7 @@ def compare() -> dict[str, Any]:
         "skippedDecryptVectors": len(all_prompt_tests) - len(prompt_tests),
         "expectedVectors": len(expected_tests),
         "checkedVectors": checked,
+        "coveragePercent": round(100 * checked / len(prompt_tests), 2) if prompt_tests else 0,
         "skippedVectors": len(skipped),
         "mismatchCount": len(mismatches),
         "result": "PASS" if not mismatches else "FAIL",
@@ -147,9 +149,18 @@ def compare() -> dict[str, Any]:
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Compare pyascon with official ACVP Ascon-AEAD128 vectors")
+    parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="fail when any official encryption vector is skipped",
+    )
+    arguments = parser.parse_args()
     report = compare()
     print(
         f"{report['result']}: checked {report['checkedVectors']} vectors; "
-        f"{report['mismatchCount']} mismatches; report={REPORT_PATH.name}"
+        f"{report['mismatchCount']} mismatches; coverage={report['coveragePercent']}%; "
+        f"skipped={report['skippedVectors']}; report={REPORT_PATH.name}"
     )
-    raise SystemExit(0 if report["result"] == "PASS" else 1)
+    failed = report["result"] != "PASS" or (arguments.strict and report["skippedVectors"] != 0)
+    raise SystemExit(1 if failed else 0)

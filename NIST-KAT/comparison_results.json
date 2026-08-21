@@ -6,6 +6,7 @@
   "skippedDecryptVectors": 120,
   "expectedVectors": 240,
   "checkedVectors": 3,
+  "coveragePercent": 2.5,
   "skippedVectors": 117,
   "mismatchCount": 0,
   "result": "PASS",

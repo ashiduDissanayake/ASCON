@@ -1,0 +1,31 @@
+# macOS and editor files
+.DS_Store
+.vscode/
+
+# Python caches and local environments
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.venv/
+venv/
+env/
+
+# Simulation and waveform outputs
+*.vvp
+*.vcd
+*.fst
+*.lxt
+*.lxt2
+*.vpd
+sim.vvp
+dump.vcd
+
+# Temporary build and coverage files
+*.log
+*.out
+*.tmp
+coverage.xml
+.coverage
+htmlcov/
