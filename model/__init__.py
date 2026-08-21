@@ -1,0 +1,1 @@
+"""Reference model helpers for Verilog vector generation."""

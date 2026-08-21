@@ -1,0 +1,600 @@
+{
+  "algorithm": "Ascon-AEAD128",
+  "source": "NIST ACVP Server Ascon-AEAD128-SP800-232",
+  "promptVectors": 240,
+  "encryptVectors": 120,
+  "skippedDecryptVectors": 120,
+  "expectedVectors": 240,
+  "checkedVectors": 3,
+  "skippedVectors": 117,
+  "mismatchCount": 0,
+  "result": "PASS",
+  "mismatches": [],
+  "skipped": [
+    {
+      "tgId": 1,
+      "tcId": 1,
+      "reason": "pyascon does not expose the ACVP nonce-masking operation"
+    },
+    {
+      "tgId": 1,
+      "tcId": 2,
+      "reason": "pyascon does not expose the ACVP nonce-masking operation"
+    },
+    {
+      "tgId": 1,
+      "tcId": 3,
+      "reason": "pyascon does not expose the ACVP nonce-masking operation"
+    },
+    {
+      "tgId": 1,
+      "tcId": 4,
+      "reason": "pyascon does not expose the ACVP nonce-masking operation"
+    },
+    {
+      "tgId": 1,
+      "tcId": 5,
+      "reason": "pyascon does not expose the ACVP nonce-masking operation"
+    },
+    {
+      "tgId": 1,
+      "tcId": 6,
+      "reason": "pyascon does not expose the ACVP nonce-masking operation"
+    },
+    {
+      "tgId": 1,
+      "tcId": 7,
+      "reason": "pyascon does not expose the ACVP nonce-masking operation"
+    },
+    {
+      "tgId": 1,
+      "tcId": 8,
+      "reason": "pyascon does not expose the ACVP nonce-masking operation"
+    },
+    {
+      "tgId": 1,
+      "tcId": 9,
+      "reason": "pyascon does not expose the ACVP nonce-masking operation"
+    },
+    {
+      "tgId": 1,
+      "tcId": 10,
+      "reason": "pyascon does not expose the ACVP nonce-masking operation"
+    },
+    {
+      "tgId": 1,
+      "tcId": 11,
+      "reason": "pyascon does not expose the ACVP nonce-masking operation"
+    },
+    {
+      "tgId": 1,
+      "tcId": 12,
+      "reason": "pyascon does not expose the ACVP nonce-masking operation"
+    },
+    {
+      "tgId": 1,
+      "tcId": 13,
+      "reason": "pyascon does not expose the ACVP nonce-masking operation"
+    },
+    {
+      "tgId": 1,
+      "tcId": 14,
+      "reason": "pyascon does not expose the ACVP nonce-masking operation"
+    },
+    {
+      "tgId": 1,
+      "tcId": 15,
+      "reason": "pyascon does not expose the ACVP nonce-masking operation"
+    },
+    {
+      "tgId": 1,
+      "tcId": 16,
+      "reason": "pyascon does not expose the ACVP nonce-masking operation"
+    },
+    {
+      "tgId": 1,
+      "tcId": 17,
+      "reason": "pyascon does not expose the ACVP nonce-masking operation"
+    },
+    {
+      "tgId": 1,
+      "tcId": 18,
+      "reason": "pyascon does not expose the ACVP nonce-masking operation"
+    },
+    {
+      "tgId": 1,
+      "tcId": 19,
+      "reason": "pyascon does not expose the ACVP nonce-masking operation"
+    },
+    {
+      "tgId": 1,
+      "tcId": 20,
+      "reason": "pyascon does not expose the ACVP nonce-masking operation"
+    },
+    {
+      "tgId": 1,
+      "tcId": 21,
+      "reason": "pyascon does not expose the ACVP nonce-masking operation"
+    },
+    {
+      "tgId": 1,
+      "tcId": 22,
+      "reason": "pyascon does not expose the ACVP nonce-masking operation"
+    },
+    {
+      "tgId": 1,
+      "tcId": 23,
+      "reason": "pyascon does not expose the ACVP nonce-masking operation"
+    },
+    {
+      "tgId": 1,
+      "tcId": 24,
+      "reason": "pyascon does not expose the ACVP nonce-masking operation"
+    },
+    {
+      "tgId": 1,
+      "tcId": 25,
+      "reason": "pyascon does not expose the ACVP nonce-masking operation"
+    },
+    {
+      "tgId": 1,
+      "tcId": 26,
+      "reason": "pyascon does not expose the ACVP nonce-masking operation"
+    },
+    {
+      "tgId": 1,
+      "tcId": 27,
+      "reason": "pyascon does not expose the ACVP nonce-masking operation"
+    },
+    {
+      "tgId": 1,
+      "tcId": 28,
+      "reason": "pyascon does not expose the ACVP nonce-masking operation"
+    },
+    {
+      "tgId": 1,
+      "tcId": 29,
+      "reason": "pyascon does not expose the ACVP nonce-masking operation"
+    },
+    {
+      "tgId": 1,
+      "tcId": 30,
+      "reason": "pyascon does not expose the ACVP nonce-masking operation"
+    },
+    {
+      "tgId": 1,
+      "tcId": 31,
+      "reason": "pyascon does not expose the ACVP nonce-masking operation"
+    },
+    {
+      "tgId": 1,
+      "tcId": 32,
+      "reason": "pyascon does not expose the ACVP nonce-masking operation"
+    },
+    {
+      "tgId": 1,
+      "tcId": 33,
+      "reason": "pyascon does not expose the ACVP nonce-masking operation"
+    },
+    {
+      "tgId": 1,
+      "tcId": 34,
+      "reason": "pyascon does not expose the ACVP nonce-masking operation"
+    },
+    {
+      "tgId": 1,
+      "tcId": 35,
+      "reason": "pyascon does not expose the ACVP nonce-masking operation"
+    },
+    {
+      "tgId": 1,
+      "tcId": 36,
+      "reason": "pyascon does not expose the ACVP nonce-masking operation"
+    },
+    {
+      "tgId": 1,
+      "tcId": 37,
+      "reason": "pyascon does not expose the ACVP nonce-masking operation"
+    },
+    {
+      "tgId": 1,
+      "tcId": 38,
+      "reason": "pyascon does not expose the ACVP nonce-masking operation"
+    },
+    {
+      "tgId": 1,
+      "tcId": 39,
+      "reason": "pyascon does not expose the ACVP nonce-masking operation"
+    },
+    {
+      "tgId": 1,
+      "tcId": 40,
+      "reason": "pyascon does not expose the ACVP nonce-masking operation"
+    },
+    {
+      "tgId": 1,
+      "tcId": 41,
+      "reason": "pyascon does not expose the ACVP nonce-masking operation"
+    },
+    {
+      "tgId": 1,
+      "tcId": 42,
+      "reason": "pyascon does not expose the ACVP nonce-masking operation"
+    },
+    {
+      "tgId": 1,
+      "tcId": 43,
+      "reason": "pyascon does not expose the ACVP nonce-masking operation"
+    },
+    {
+      "tgId": 1,
+      "tcId": 44,
+      "reason": "pyascon does not expose the ACVP nonce-masking operation"
+    },
+    {
+      "tgId": 1,
+      "tcId": 45,
+      "reason": "pyascon does not expose the ACVP nonce-masking operation"
+    },
+    {
+      "tgId": 1,
+      "tcId": 46,
+      "reason": "pyascon does not expose the ACVP nonce-masking operation"
+    },
+    {
+      "tgId": 1,
+      "tcId": 47,
+      "reason": "pyascon does not expose the ACVP nonce-masking operation"
+    },
+    {
+      "tgId": 1,
+      "tcId": 48,
+      "reason": "pyascon does not expose the ACVP nonce-masking operation"
+    },
+    {
+      "tgId": 1,
+      "tcId": 49,
+      "reason": "pyascon does not expose the ACVP nonce-masking operation"
+    },
+    {
+      "tgId": 1,
+      "tcId": 50,
+      "reason": "pyascon does not expose the ACVP nonce-masking operation"
+    },
+    {
+      "tgId": 1,
+      "tcId": 51,
+      "reason": "pyascon does not expose the ACVP nonce-masking operation"
+    },
+    {
+      "tgId": 1,
+      "tcId": 52,
+      "reason": "pyascon does not expose the ACVP nonce-masking operation"
+    },
+    {
+      "tgId": 1,
+      "tcId": 53,
+      "reason": "pyascon does not expose the ACVP nonce-masking operation"
+    },
+    {
+      "tgId": 1,
+      "tcId": 54,
+      "reason": "pyascon does not expose the ACVP nonce-masking operation"
+    },
+    {
+      "tgId": 1,
+      "tcId": 55,
+      "reason": "pyascon does not expose the ACVP nonce-masking operation"
+    },
+    {
+      "tgId": 1,
+      "tcId": 56,
+      "reason": "pyascon does not expose the ACVP nonce-masking operation"
+    },
+    {
+      "tgId": 1,
+      "tcId": 57,
+      "reason": "pyascon does not expose the ACVP nonce-masking operation"
+    },
+    {
+      "tgId": 1,
+      "tcId": 58,
+      "reason": "pyascon does not expose the ACVP nonce-masking operation"
+    },
+    {
+      "tgId": 1,
+      "tcId": 59,
+      "reason": "pyascon does not expose the ACVP nonce-masking operation"
+    },
+    {
+      "tgId": 1,
+      "tcId": 60,
+      "reason": "pyascon does not expose the ACVP nonce-masking operation"
+    },
+    {
+      "tgId": 2,
+      "tcId": 61,
+      "reason": "pyascon accepts byte lengths; this ACVP vector uses a non-byte length"
+    },
+    {
+      "tgId": 2,
+      "tcId": 62,
+      "reason": "pyascon accepts byte lengths; this ACVP vector uses a non-byte length"
+    },
+    {
+      "tgId": 2,
+      "tcId": 63,
+      "reason": "pyascon accepts byte lengths; this ACVP vector uses a non-byte length"
+    },
+    {
+      "tgId": 2,
+      "tcId": 64,
+      "reason": "pyascon accepts byte lengths; this ACVP vector uses a non-byte length"
+    },
+    {
+      "tgId": 2,
+      "tcId": 65,
+      "reason": "pyascon accepts byte lengths; this ACVP vector uses a non-byte length"
+    },
+    {
+      "tgId": 2,
+      "tcId": 66,
+      "reason": "pyascon accepts byte lengths; this ACVP vector uses a non-byte length"
+    },
+    {
+      "tgId": 2,
+      "tcId": 67,
+      "reason": "pyascon accepts byte lengths; this ACVP vector uses a non-byte length"
+    },
+    {
+      "tgId": 2,
+      "tcId": 68,
+      "reason": "pyascon accepts byte lengths; this ACVP vector uses a non-byte length"
+    },
+    {
+      "tgId": 2,
+      "tcId": 69,
+      "reason": "pyascon accepts byte lengths; this ACVP vector uses a non-byte length"
+    },
+    {
+      "tgId": 2,
+      "tcId": 70,
+      "reason": "pyascon accepts byte lengths; this ACVP vector uses a non-byte length"
+    },
+    {
+      "tgId": 2,
+      "tcId": 71,
+      "reason": "pyascon accepts byte lengths; this ACVP vector uses a non-byte length"
+    },
+    {
+      "tgId": 2,
+      "tcId": 72,
+      "reason": "pyascon accepts byte lengths; this ACVP vector uses a non-byte length"
+    },
+    {
+      "tgId": 2,
+      "tcId": 73,
+      "reason": "pyascon accepts byte lengths; this ACVP vector uses a non-byte length"
+    },
+    {
+      "tgId": 2,
+      "tcId": 74,
+      "reason": "pyascon accepts byte lengths; this ACVP vector uses a non-byte length"
+    },
+    {
+      "tgId": 2,
+      "tcId": 75,
+      "reason": "pyascon accepts byte lengths; this ACVP vector uses a non-byte length"
+    },
+    {
+      "tgId": 2,
+      "tcId": 76,
+      "reason": "pyascon accepts byte lengths; this ACVP vector uses a non-byte length"
+    },
+    {
+      "tgId": 2,
+      "tcId": 77,
+      "reason": "pyascon accepts byte lengths; this ACVP vector uses a non-byte length"
+    },
+    {
+      "tgId": 2,
+      "tcId": 78,
+      "reason": "pyascon accepts byte lengths; this ACVP vector uses a non-byte length"
+    },
+    {
+      "tgId": 2,
+      "tcId": 79,
+      "reason": "pyascon accepts byte lengths; this ACVP vector uses a non-byte length"
+    },
+    {
+      "tgId": 2,
+      "tcId": 82,
+      "reason": "pyascon accepts byte lengths; this ACVP vector uses a non-byte length"
+    },
+    {
+      "tgId": 2,
+      "tcId": 83,
+      "reason": "pyascon accepts byte lengths; this ACVP vector uses a non-byte length"
+    },
+    {
+      "tgId": 2,
+      "tcId": 84,
+      "reason": "pyascon accepts byte lengths; this ACVP vector uses a non-byte length"
+    },
+    {
+      "tgId": 2,
+      "tcId": 85,
+      "reason": "pyascon accepts byte lengths; this ACVP vector uses a non-byte length"
+    },
+    {
+      "tgId": 2,
+      "tcId": 86,
+      "reason": "pyascon accepts byte lengths; this ACVP vector uses a non-byte length"
+    },
+    {
+      "tgId": 2,
+      "tcId": 87,
+      "reason": "pyascon accepts byte lengths; this ACVP vector uses a non-byte length"
+    },
+    {
+      "tgId": 2,
+      "tcId": 88,
+      "reason": "pyascon accepts byte lengths; this ACVP vector uses a non-byte length"
+    },
+    {
+      "tgId": 2,
+      "tcId": 89,
+      "reason": "pyascon accepts byte lengths; this ACVP vector uses a non-byte length"
+    },
+    {
+      "tgId": 2,
+      "tcId": 90,
+      "reason": "pyascon accepts byte lengths; this ACVP vector uses a non-byte length"
+    },
+    {
+      "tgId": 2,
+      "tcId": 91,
+      "reason": "pyascon accepts byte lengths; this ACVP vector uses a non-byte length"
+    },
+    {
+      "tgId": 2,
+      "tcId": 92,
+      "reason": "pyascon accepts byte lengths; this ACVP vector uses a non-byte length"
+    },
+    {
+      "tgId": 2,
+      "tcId": 93,
+      "reason": "pyascon accepts byte lengths; this ACVP vector uses a non-byte length"
+    },
+    {
+      "tgId": 2,
+      "tcId": 94,
+      "reason": "pyascon accepts byte lengths; this ACVP vector uses a non-byte length"
+    },
+    {
+      "tgId": 2,
+      "tcId": 95,
+      "reason": "pyascon accepts byte lengths; this ACVP vector uses a non-byte length"
+    },
+    {
+      "tgId": 2,
+      "tcId": 96,
+      "reason": "pyascon accepts byte lengths; this ACVP vector uses a non-byte length"
+    },
+    {
+      "tgId": 2,
+      "tcId": 97,
+      "reason": "pyascon accepts byte lengths; this ACVP vector uses a non-byte length"
+    },
+    {
+      "tgId": 2,
+      "tcId": 98,
+      "reason": "pyascon accepts byte lengths; this ACVP vector uses a non-byte length"
+    },
+    {
+      "tgId": 2,
+      "tcId": 99,
+      "reason": "pyascon accepts byte lengths; this ACVP vector uses a non-byte length"
+    },
+    {
+      "tgId": 2,
+      "tcId": 100,
+      "reason": "pyascon accepts byte lengths; this ACVP vector uses a non-byte length"
+    },
+    {
+      "tgId": 2,
+      "tcId": 101,
+      "reason": "pyascon accepts byte lengths; this ACVP vector uses a non-byte length"
+    },
+    {
+      "tgId": 2,
+      "tcId": 102,
+      "reason": "pyascon accepts byte lengths; this ACVP vector uses a non-byte length"
+    },
+    {
+      "tgId": 2,
+      "tcId": 103,
+      "reason": "pyascon accepts byte lengths; this ACVP vector uses a non-byte length"
+    },
+    {
+      "tgId": 2,
+      "tcId": 104,
+      "reason": "pyascon accepts byte lengths; this ACVP vector uses a non-byte length"
+    },
+    {
+      "tgId": 2,
+      "tcId": 105,
+      "reason": "pyascon accepts byte lengths; this ACVP vector uses a non-byte length"
+    },
+    {
+      "tgId": 2,
+      "tcId": 106,
+      "reason": "pyascon accepts byte lengths; this ACVP vector uses a non-byte length"
+    },
+    {
+      "tgId": 2,
+      "tcId": 107,
+      "reason": "pyascon accepts byte lengths; this ACVP vector uses a non-byte length"
+    },
+    {
+      "tgId": 2,
+      "tcId": 108,
+      "reason": "pyascon accepts byte lengths; this ACVP vector uses a non-byte length"
+    },
+    {
+      "tgId": 2,
+      "tcId": 109,
+      "reason": "pyascon accepts byte lengths; this ACVP vector uses a non-byte length"
+    },
+    {
+      "tgId": 2,
+      "tcId": 111,
+      "reason": "pyascon accepts byte lengths; this ACVP vector uses a non-byte length"
+    },
+    {
+      "tgId": 2,
+      "tcId": 112,
+      "reason": "pyascon accepts byte lengths; this ACVP vector uses a non-byte length"
+    },
+    {
+      "tgId": 2,
+      "tcId": 113,
+      "reason": "pyascon accepts byte lengths; this ACVP vector uses a non-byte length"
+    },
+    {
+      "tgId": 2,
+      "tcId": 114,
+      "reason": "pyascon accepts byte lengths; this ACVP vector uses a non-byte length"
+    },
+    {
+      "tgId": 2,
+      "tcId": 115,
+      "reason": "pyascon accepts byte lengths; this ACVP vector uses a non-byte length"
+    },
+    {
+      "tgId": 2,
+      "tcId": 116,
+      "reason": "pyascon accepts byte lengths; this ACVP vector uses a non-byte length"
+    },
+    {
+      "tgId": 2,
+      "tcId": 117,
+      "reason": "pyascon accepts byte lengths; this ACVP vector uses a non-byte length"
+    },
+    {
+      "tgId": 2,
+      "tcId": 118,
+      "reason": "pyascon accepts byte lengths; this ACVP vector uses a non-byte length"
+    },
+    {
+      "tgId": 2,
+      "tcId": 119,
+      "reason": "pyascon accepts byte lengths; this ACVP vector uses a non-byte length"
+    },
+    {
+      "tgId": 2,
+      "tcId": 120,
+      "reason": "pyascon accepts byte lengths; this ACVP vector uses a non-byte length"
+    }
+  ]
+}
