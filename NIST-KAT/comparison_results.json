@@ -10,7 +10,7 @@
   "lwcCheckedVectors": 1089,
   "lwcCoveragePercent": 100.0,
   "checkedVectors": 1092,
-  "coveragePercent": 100.0,
+  "coveragePercent": 90.32,
   "skippedVectors": 117,
   "mismatchCount": 0,
   "result": "PASS",
@@ -603,7 +603,8 @@
     }
   ],
   "lwcKAT": {
-    "source": "/Users/ashidudissanayake/Dev/ASCON/pyascon/LWC_AEAD_KAT_128_128.txt",
+    "source": "/Users/ashidudissanayake/Dev/ASCON/NIST-KAT/LWC_AEAD_KAT_128_128.txt",
+    "availableVectors": 1089,
     "checkedVectors": 1089,
     "coveragePercent": 100.0,
     "mismatchCount": 0,

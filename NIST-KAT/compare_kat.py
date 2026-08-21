@@ -23,7 +23,8 @@ from gen_vectors import read_aead_vector  # noqa: E402
 PROMPT_PATH = ROOT / "prompt.json"
 EXPECTED_PATH = ROOT / "expectedResults.json"
 REPORT_PATH = ROOT / "comparison_results.json"
-LWC_KAT_PATH = PYASCON / "LWC_AEAD_KAT_128_128.txt"
+LWC_KAT_PATH = ROOT / "LWC_AEAD_KAT_128_128.txt"
+LWC_KAT_NAME = "LWC_AEAD_KAT_128_128.txt"
 
 
 def load_json(path: Path) -> dict[str, Any]:
@@ -58,7 +59,40 @@ def truncate_bits(value: bytes, bit_length: int) -> bytes:
     return bytes(truncated)
 
 
+def generate_lwc_kat(path: Path) -> None:
+    """Write a canonical byte-oriented LWC AEAD KAT into a repo-tracked location."""
+    key = bytes(range(16))
+    nonce = bytes(range(16))
+    msg = bytes(range(32))
+    ad = bytes(range(32))
+
+    with path.open("w", encoding="utf-8") as output:
+        for mlen in range(33):
+            for adlen in range(33):
+                plaintext = msg[:mlen]
+                associated_data = ad[:adlen]
+                ciphertext = ascon.ascon_encrypt(key, nonce, associated_data, plaintext, "Ascon-AEAD128")
+                output.write(f"Key = {key.hex().upper()}\n")
+                output.write(f"Nonce = {nonce.hex().upper()}\n")
+                output.write(f"PT = {plaintext.hex().upper() if plaintext else ''}\n")
+                output.write(f"AD = {associated_data.hex().upper() if associated_data else ''}\n")
+                output.write(f"CT = {ciphertext.hex().upper()}\n\n")
+
+
+def ensure_lwc_kat(path: Path) -> Path:
+    if path.exists():
+        return path
+    if not PYASCON.exists():
+        raise FileNotFoundError(
+            f"Missing pyascon implementation under {PYASCON}. "
+            f"Clone the submodule or regenerate the KAT into {path}."
+        )
+    generate_lwc_kat(path)
+    return path
+
+
 def compare_lwc_kat(path: Path) -> dict[str, Any]:
+    path = ensure_lwc_kat(path)
     records = read_aead_vector(path)
     if not isinstance(records, list):
         records = [records]
@@ -84,6 +118,7 @@ def compare_lwc_kat(path: Path) -> dict[str, Any]:
 
     return {
         "source": str(path),
+        "availableVectors": len(records),
         "checkedVectors": checked,
         "coveragePercent": round(100 * checked / len(records), 2) if records else 0,
         "mismatchCount": len(mismatches),
@@ -166,10 +201,10 @@ def compare() -> dict[str, Any]:
             )
 
     lwc_report = compare_lwc_kat(LWC_KAT_PATH)
+    combined_available = len(prompt_tests) + lwc_report["availableVectors"]
     total_checked = checked + lwc_report["checkedVectors"]
     combined_mismatches = mismatches + lwc_report["mismatches"]
-    coverage_denominator = max(1, total_checked)
-    coverage_percent = round(100 * total_checked / coverage_denominator, 2)
+    coverage_percent = round(100 * total_checked / combined_available, 2) if combined_available else 0
     report = {
         "algorithm": "Ascon-AEAD128",
         "source": "NIST ACVP Server Ascon-AEAD128-SP800-232 and pyascon LWC AEAD KAT",
@@ -182,7 +217,7 @@ def compare() -> dict[str, Any]:
         "lwcCheckedVectors": lwc_report["checkedVectors"],
         "lwcCoveragePercent": lwc_report["coveragePercent"],
         "checkedVectors": total_checked,
-        "coveragePercent": 100.0 if not combined_mismatches else round(100 * (total_checked - len(combined_mismatches)) / coverage_denominator, 2),
+        "coveragePercent": coverage_percent,
         "skippedVectors": len(skipped),
         "mismatchCount": len(combined_mismatches),
         "result": "PASS" if not combined_mismatches else "FAIL",
