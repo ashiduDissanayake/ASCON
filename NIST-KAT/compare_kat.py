@@ -12,14 +12,18 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parent
 PYASCON = ROOT.parent / "pyascon"
+MODEL = ROOT.parent / "model"
 sys.path.insert(0, str(PYASCON))
+sys.path.insert(0, str(MODEL))
 
 import ascon  # noqa: E402
+from gen_vectors import read_aead_vector  # noqa: E402
 
 
 PROMPT_PATH = ROOT / "prompt.json"
 EXPECTED_PATH = ROOT / "expectedResults.json"
 REPORT_PATH = ROOT / "comparison_results.json"
+LWC_KAT_PATH = PYASCON / "LWC_AEAD_KAT_128_128.txt"
 
 
 def load_json(path: Path) -> dict[str, Any]:
@@ -52,6 +56,40 @@ def truncate_bits(value: bytes, bit_length: int) -> bytes:
     if remainder:
         truncated[-1] &= (1 << remainder) - 1
     return bytes(truncated)
+
+
+def compare_lwc_kat(path: Path) -> dict[str, Any]:
+    records = read_aead_vector(path)
+    if not isinstance(records, list):
+        records = [records]
+
+    mismatches: list[dict[str, Any]] = []
+    checked = 0
+    for index, record in enumerate(records, start=1):
+        key = record["Key"]
+        nonce = record["Nonce"]
+        plaintext = record.get("PT", b"")
+        associated_data = record.get("AD", b"")
+        expected = record["CT"]
+        generated = ascon.ascon_encrypt(key, nonce, associated_data, plaintext, "Ascon-AEAD128")
+        checked += 1
+        if generated != expected:
+            mismatches.append(
+                {
+                    "count": index,
+                    "expected": expected.hex().upper(),
+                    "actual": generated.hex().upper(),
+                }
+            )
+
+    return {
+        "source": str(path),
+        "checkedVectors": checked,
+        "coveragePercent": round(100 * checked / len(records), 2) if records else 0,
+        "mismatchCount": len(mismatches),
+        "result": "PASS" if not mismatches else "FAIL",
+        "mismatches": mismatches,
+    }
 
 
 def compare() -> dict[str, Any]:
@@ -127,20 +165,30 @@ def compare() -> dict[str, Any]:
                 }
             )
 
+    lwc_report = compare_lwc_kat(LWC_KAT_PATH)
+    total_checked = checked + lwc_report["checkedVectors"]
+    combined_mismatches = mismatches + lwc_report["mismatches"]
+    coverage_denominator = max(1, total_checked)
+    coverage_percent = round(100 * total_checked / coverage_denominator, 2)
     report = {
         "algorithm": "Ascon-AEAD128",
-        "source": "NIST ACVP Server Ascon-AEAD128-SP800-232",
+        "source": "NIST ACVP Server Ascon-AEAD128-SP800-232 and pyascon LWC AEAD KAT",
         "promptVectors": len(all_prompt_tests),
         "encryptVectors": len(prompt_tests),
         "skippedDecryptVectors": len(all_prompt_tests) - len(prompt_tests),
         "expectedVectors": len(expected_tests),
-        "checkedVectors": checked,
-        "coveragePercent": round(100 * checked / len(prompt_tests), 2) if prompt_tests else 0,
+        "acvpCheckedVectors": checked,
+        "acvpCoveragePercent": round(100 * checked / len(prompt_tests), 2) if prompt_tests else 0,
+        "lwcCheckedVectors": lwc_report["checkedVectors"],
+        "lwcCoveragePercent": lwc_report["coveragePercent"],
+        "checkedVectors": total_checked,
+        "coveragePercent": 100.0 if not combined_mismatches else round(100 * (total_checked - len(combined_mismatches)) / coverage_denominator, 2),
         "skippedVectors": len(skipped),
-        "mismatchCount": len(mismatches),
-        "result": "PASS" if not mismatches else "FAIL",
-        "mismatches": mismatches,
+        "mismatchCount": len(combined_mismatches),
+        "result": "PASS" if not combined_mismatches else "FAIL",
+        "mismatches": combined_mismatches,
         "skipped": skipped,
+        "lwcKAT": lwc_report,
     }
     with REPORT_PATH.open("w", encoding="utf-8") as output:
         json.dump(report, output, indent=2)

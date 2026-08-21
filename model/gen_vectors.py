@@ -29,6 +29,56 @@ def truncate_bits(value: bytes, bit_length: int) -> bytes:
     return bytes(result)
 
 
+def _iter_aead_records(text: str) -> list[dict[str, str]]:
+    records: list[dict[str, str]] = []
+    current: dict[str, str] = {}
+    for raw_line in text.splitlines():
+        line = raw_line.rstrip()
+        if not line.strip():
+            if current:
+                records.append(current)
+                current = {}
+            continue
+        if " = " in line:
+            label, value = line.split(" = ", 1)
+            current[label.strip()] = value.strip()
+        elif line.endswith(" ="):
+            label = line[:-2].strip()
+            current[label] = ""
+        else:
+            raise ValueError(f"Malformed AEAD vector line: {line!r}")
+    if current:
+        records.append(current)
+    return records
+
+
+def read_aead_vector(source: str | Path) -> dict[str, bytes] | list[dict[str, bytes]]:
+    """Read one or more LWC-style AEAD KAT records.
+
+    The canonical text encoding is a sequence of key-value pairs such as
+    ``Key = ...``, ``Nonce = ...``, ``PT = ...``, ``AD = ...``, and ``CT = ...``.
+    Empty fields are represented as blank values. A record may optionally include a
+    ``Count`` field, which is ignored when parsed.
+    """
+    if isinstance(source, Path):
+        text = source.read_text(encoding="utf-8")
+    else:
+        text = source
+
+    records = []
+    for record in _iter_aead_records(text):
+        parsed = {}
+        for label, value in record.items():
+            if label == "Count":
+                continue
+            parsed[label] = bytes.fromhex(value) if value else b""
+        records.append(parsed)
+
+    if len(records) == 1:
+        return records[0]
+    return records
+
+
 def official_cases() -> list[tuple[bytes, bytes, bytes, bytes, bytes, bytes, int]]:
     prompt = json.loads(PROMPT_PATH.read_text(encoding="utf-8"))
     expected = json.loads(EXPECTED_PATH.read_text(encoding="utf-8"))

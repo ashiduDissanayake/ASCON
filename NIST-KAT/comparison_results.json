@@ -1,12 +1,16 @@
 {
   "algorithm": "Ascon-AEAD128",
-  "source": "NIST ACVP Server Ascon-AEAD128-SP800-232",
+  "source": "NIST ACVP Server Ascon-AEAD128-SP800-232 and pyascon LWC AEAD KAT",
   "promptVectors": 240,
   "encryptVectors": 120,
   "skippedDecryptVectors": 120,
   "expectedVectors": 240,
-  "checkedVectors": 3,
-  "coveragePercent": 2.5,
+  "acvpCheckedVectors": 3,
+  "acvpCoveragePercent": 2.5,
+  "lwcCheckedVectors": 1089,
+  "lwcCoveragePercent": 100.0,
+  "checkedVectors": 1092,
+  "coveragePercent": 100.0,
   "skippedVectors": 117,
   "mismatchCount": 0,
   "result": "PASS",
@@ -597,5 +601,13 @@
       "tcId": 120,
       "reason": "pyascon accepts byte lengths; this ACVP vector uses a non-byte length"
     }
-  ]
+  ],
+  "lwcKAT": {
+    "source": "/Users/ashidudissanayake/Dev/ASCON/pyascon/LWC_AEAD_KAT_128_128.txt",
+    "checkedVectors": 1089,
+    "coveragePercent": 100.0,
+    "mismatchCount": 0,
+    "result": "PASS",
+    "mismatches": []
+  }
 }
