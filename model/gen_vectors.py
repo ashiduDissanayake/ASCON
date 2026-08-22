@@ -6,7 +6,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from refmodel import encrypt, permutation
+from refmodel import encrypt, permutation, permutation_stages
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -148,12 +148,41 @@ def write_vectors() -> None:
                 + "\n"
             )
 
-    states = [tuple(range(5)), (0, 0, 0, 0, 0), (0x0123456789ABCDEF,) * 5]
+    states = [
+        tuple(range(5)),
+        (0, 0, 0, 0, 0),
+        (0x0123456789ABCDEF,) * 5,
+        (0xFFFFFFFFFFFFFFFF,) * 5,
+        (0x8000000000000001, 0x0000000000000000, 0xDEADBEEFCAFEBABE, 0x0102030405060708, 0x1122334455667788),
+    ]
+
+    def words_to_hex(words: Iterable[int]) -> str:
+        return "".join(f"{word:016X}" for word in words)
+
     with (VECTOR_DIR / "submodule_cases.vec").open("w", encoding="ascii") as output:
         for state in states:
             result = permutation(state)
-            input_hex = "".join(f"{word:016X}" for word in state)
-            output.write(f"{input_hex} {''.join(f'{word:016X}' for word in result)}\n")
+            output.write(f"{words_to_hex(state)} {words_to_hex(result)}\n")
+
+    # Per-layer vectors: exercise ascon_pS and ascon_pL in isolation across
+    # every round of a full 12-round permutation for each seed state, and
+    # ascon_round (pC + pS + pL together, with its const_idx input) the same
+    # way. This lets tb/ascon_pS_tb.v, tb/ascon_pL_tb.v, and
+    # tb/ascon_round_tb.v cross-check each RTL submodule against the exact
+    # intermediate state the Python model computes, not just the end-to-end
+    # 12-round result.
+    with (VECTOR_DIR / "pS_cases.vec").open("w", encoding="ascii") as ps_out, \
+         (VECTOR_DIR / "pL_cases.vec").open("w", encoding="ascii") as pl_out, \
+         (VECTOR_DIR / "round_cases.vec").open("w", encoding="ascii") as round_out:
+        for state in states:
+            round_input = tuple(word & 0xFFFFFFFFFFFFFFFF for word in state)
+            for stage in permutation_stages(state):
+                ps_out.write(f"{words_to_hex(stage['pC'])} {words_to_hex(stage['pS'])}\n")
+                pl_out.write(f"{words_to_hex(stage['pS'])} {words_to_hex(stage['pL'])}\n")
+                round_out.write(
+                    f"{words_to_hex(round_input)} {stage['const_idx']:X} {words_to_hex(stage['pL'])}\n"
+                )
+                round_input = stage["pL"]
 
 
 if __name__ == "__main__":

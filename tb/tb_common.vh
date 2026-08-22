@@ -21,6 +21,17 @@ begin
 end
 endtask
 
+task automatic read_round_vector;
+    input integer vector_file;
+    output reg [319:0] state_in;
+    output reg [3:0] const_idx;
+    output reg [319:0] state_expected;
+    output integer read_count;
+begin
+    read_count = $fscanf(vector_file, "%h %h %h\n", state_in, const_idx, state_expected);
+end
+endtask
+
 task automatic score_state;
     input integer vector_number;
     input [319:0] state_actual;

@@ -68,6 +68,51 @@ def permutation(state: Iterable[int], rounds: int = 12, trace: bool = False) -> 
     return tuple(words)
 
 
+def permutation_stages(state: Iterable[int], rounds: int = 12) -> list[dict[str, tuple[int, ...]]]:
+    """Apply Ascon's permutation and return every layer's output per round.
+
+    Returns a list with one entry per round executed, in execution order.
+    Each entry is a dict with keys ``const_idx``, ``pC`` (state after the
+    constant-addition layer), ``pS`` (state after the substitution layer),
+    and ``pL`` (state after the linear diffusion layer, i.e. the state
+    entering the next round). This mirrors ascon_pC/ascon_pS/ascon_pL/
+    ascon_round in ``rtl/`` so each submodule can be validated in isolation
+    against the same reference trace used for the full permutation.
+    """
+    words = [word & MASK64 for word in state]
+    if len(words) != 5:
+        raise ValueError("state must contain five 64-bit words")
+    if not 0 <= rounds <= 12:
+        raise ValueError("rounds must be between 0 and 12")
+
+    stages: list[dict[str, tuple[int, ...]]] = []
+    for round_number in range(12 - rounds, 12):
+        const_idx = round_number + 4
+        words[2] ^= 0xF0 - round_number * 0x10 + round_number
+        pc_state = tuple(words)
+
+        words[0] ^= words[4]
+        words[4] ^= words[3]
+        words[2] ^= words[1]
+        temporary = [(words[i] ^ MASK64) & words[(i + 1) % 5] for i in range(5)]
+        for index in range(5):
+            words[index] ^= temporary[(index + 1) % 5]
+        words[1] ^= words[0]
+        words[0] ^= words[4]
+        words[3] ^= words[2]
+        words[2] ^= MASK64
+        ps_state = tuple(words)
+
+        rotations = ((19, 28), (61, 39), (1, 6), (10, 17), (7, 41))
+        for index, (first, second) in enumerate(rotations):
+            words[index] ^= _rotate_right(words[index], first) ^ _rotate_right(words[index], second)
+            words[index] &= MASK64
+        pl_state = tuple(words)
+
+        stages.append({"const_idx": const_idx, "pC": pc_state, "pS": ps_state, "pL": pl_state})
+    return stages
+
+
 def encrypt(key: bytes, nonce: bytes, ad: bytes, pt: bytes, trace: bool = False) -> tuple[bytes, bytes]:
     """Encrypt and return ``(ciphertext, 16-byte authentication tag)``."""
     _validate(key, nonce)
