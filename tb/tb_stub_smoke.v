@@ -8,7 +8,11 @@ module tb_stub_smoke;
     integer read_count;
     integer vector_number;
 
+    `ifndef SYNTHESIS
+    `define TB_COMMON_IN_MODULE
     `include "tb_common.vh"
+    `undef TB_COMMON_IN_MODULE
+    `endif
 
     stub_always_fail dut (
         .state_in(state_in),

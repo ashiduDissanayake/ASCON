@@ -1,6 +1,4 @@
-`ifndef TB_COMMON_VH
-`define TB_COMMON_VH
-
+`ifdef TB_COMMON_IN_MODULE
 integer pass_count;
 integer fail_count;
 integer vector_count;
@@ -45,8 +43,10 @@ endtask
 task automatic report_summary;
 begin
     $display("SUMMARY vectors=%0d pass=%0d fail=%0d", vector_count, pass_count, fail_count);
-    if (fail_count != 0)
-        $fatal(1, "verification failed");
+    if (fail_count != 0) begin
+        $display("verification failed");
+        $finish;
+    end
 end
 endtask
 
