@@ -27,7 +27,7 @@ The line-based KAT format used by the Python model is documented in `docs/vector
 - `ascon_pS.v` — bitsliced 5-bit S-box substitution layer
 - `ascon_pL.v` — word-wise linear diffusion layer
 - `ascon_round.v` — one full round, composed as `ascon_pC` -> `ascon_pS` -> `ascon_pL`
-- `ascon_permutation.v` — the full, parameterized (`ROUNDS`, default 12) permutation, built by unrolling `ascon_round` over a 320-bit `state_in`/`state_out` bus
+- `ascon_permutation.v` — the full, parameterized (`ROUNDS`, default 12) permutation. This is an iterative, clocked datapath: a single `ascon_round` instance is reused every cycle, driven by a 320-bit state register, a round counter, and a `start`/`done` handshake. Pulse `start` for one cycle with `state_in` held, wait `ROUNDS` cycles for `done` to pulse, then read `state_out`. This is the area-efficient hardware shape rather than a fully spatially-unrolled combinational block.
 
 Each RTL module has a matching file-driven testbench under `tb/`, validated against vectors generated straight from `model/refmodel.py` (see `docs/vector_format.md` for the vector layout):
 

@@ -14,43 +14,73 @@
 module ascon_permutation #(
     parameter integer ROUNDS = 12
 ) (
+    input  wire        clk,
+    input  wire        rst_n,
+    input  wire        start,
     input  wire [319:0] state_in,
-    output wire [319:0] state_out
+    output reg  [319:0] state_out,
+    output reg         done
 );
 
-    // words[0] holds the state entering round 0, words[ROUNDS] holds the
-    // final state after all rounds have been applied.
-    wire [63:0] x0 [0:ROUNDS];
-    wire [63:0] x1 [0:ROUNDS];
-    wire [63:0] x2 [0:ROUNDS];
-    wire [63:0] x3 [0:ROUNDS];
-    wire [63:0] x4 [0:ROUNDS];
+    reg [319:0] state_reg;
+    reg [7:0] round_count;
+    reg running;
 
-    assign x0[0] = state_in[319:256];
-    assign x1[0] = state_in[255:192];
-    assign x2[0] = state_in[191:128];
-    assign x3[0] = state_in[127:64];
-    assign x4[0] = state_in[63:0];
+    wire [63:0] x0_cur, x1_cur, x2_cur, x3_cur, x4_cur;
+    wire [63:0] x0_next, x1_next, x2_next, x3_next, x4_next;
+    wire [319:0] state_next;
 
-    genvar r;
-    generate
-        for (r = 0; r < ROUNDS; r = r + 1) begin : g_round
-            ascon_round u_round (
-                .const_idx(4'((16 - ROUNDS) + r)),
-                .x0_in (x0[r]),
-                .x1_in (x1[r]),
-                .x2_in (x2[r]),
-                .x3_in (x3[r]),
-                .x4_in (x4[r]),
-                .x0_out(x0[r+1]),
-                .x1_out(x1[r+1]),
-                .x2_out(x2[r+1]),
-                .x3_out(x3[r+1]),
-                .x4_out(x4[r+1])
-            );
+    assign x0_cur = state_reg[319:256];
+    assign x1_cur = state_reg[255:192];
+    assign x2_cur = state_reg[191:128];
+    assign x3_cur = state_reg[127:64];
+    assign x4_cur = state_reg[63:0];
+
+    ascon_round u_round (
+        .const_idx(4'((16 - ROUNDS) + round_count)),
+        .x0_in (x0_cur),
+        .x1_in (x1_cur),
+        .x2_in (x2_cur),
+        .x3_in (x3_cur),
+        .x4_in (x4_cur),
+        .x0_out(x0_next),
+        .x1_out(x1_next),
+        .x2_out(x2_next),
+        .x3_out(x3_next),
+        .x4_out(x4_next)
+    );
+
+    assign state_next = {x0_next, x1_next, x2_next, x3_next, x4_next};
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            state_reg  <= 320'd0;
+            state_out  <= 320'd0;
+            round_count <= 8'd0;
+            running    <= 1'b0;
+            done       <= 1'b0;
+        end else begin
+            done <= 1'b0;
+
+            if (start && !running) begin
+                state_reg   <= state_in;
+                state_out   <= state_in;
+                round_count <= 8'd0;
+                running     <= 1'b1;
+            end else if (running) begin
+                if (round_count == (ROUNDS - 1)) begin
+                    state_reg   <= state_next;
+                    state_out   <= state_next;
+                    round_count <= 8'd0;
+                    running     <= 1'b0;
+                    done        <= 1'b1;
+                end else begin
+                    state_reg   <= state_next;
+                    state_out   <= state_next;
+                    round_count <= round_count + 8'd1;
+                end
+            end
         end
-    endgenerate
-
-    assign state_out = {x0[ROUNDS], x1[ROUNDS], x2[ROUNDS], x3[ROUNDS], x4[ROUNDS]};
+    end
 
 endmodule

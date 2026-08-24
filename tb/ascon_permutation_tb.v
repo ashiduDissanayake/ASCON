@@ -13,7 +13,11 @@
 module ascon_permutation_tb;
     reg  [319:0] state_in;
     reg  [319:0] state_expected;
+    reg          clk;
+    reg          rst_n;
+    reg          start;
     wire [319:0] state_out;
+    wire         done;
 
     integer vector_file;
     integer read_count;
@@ -26,14 +30,28 @@ module ascon_permutation_tb;
 `endif
 
     ascon_permutation #(.ROUNDS(12)) dut (
+        .clk      (clk),
+        .rst_n    (rst_n),
+        .start    (start),
         .state_in (state_in),
-        .state_out(state_out)
+        .state_out(state_out),
+        .done     (done)
     );
+
+    always #5 clk = ~clk;
 
 `ifndef SYNTHESIS
     initial begin
         $dumpfile("dump_permutation.vcd");
         $dumpvars(0, ascon_permutation_tb);
+
+        clk = 0;
+        rst_n = 0;
+        start = 0;
+        state_in = 320'd0;
+
+        #12;
+        rst_n = 1;
 
         init_scoreboard();
         vector_file = $fopen("vectors/submodule_cases.vec", "r");
@@ -44,6 +62,12 @@ module ascon_permutation_tb;
         while (!$feof(vector_file)) begin
             read_state_vector(vector_file, state_in, state_expected, read_count);
             if (read_count == 2) begin
+                start = 1;
+                #10;
+                start = 0;
+                while (!done) begin
+                    #10;
+                end
                 #1;
                 score_state(vector_number, state_out, state_expected);
                 vector_number = vector_number + 1;
