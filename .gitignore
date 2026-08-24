@@ -29,3 +29,6 @@ dump.vcd
 coverage.xml
 .coverage
 htmlcov/
+
+
+vivado_work/
