@@ -19,10 +19,10 @@ module ascon_keyxor (
     output wire [63:0] x4_out
 );
 
-    assign x0_out = x0_in ^ key[63:0];
-    assign x1_out = x1_in ^ key[127:64];
+    assign x0_out = x0_in;
+    assign x1_out = x1_in;
     assign x2_out = x2_in;
-    assign x3_out = x3_in;
-    assign x4_out = x4_in;
+    assign x3_out = x3_in ^ key[127:64];
+    assign x4_out = x4_in ^ key[63:0];
 
 endmodule
