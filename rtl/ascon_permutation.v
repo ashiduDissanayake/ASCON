@@ -35,9 +35,11 @@ module ascon_permutation #(
     assign x2_cur = state_reg[191:128];
     assign x3_cur = state_reg[127:64];
     assign x4_cur = state_reg[63:0];
+    
+    wire [7:0] const_idx_full = (16 - ROUNDS) + round_count;
 
     ascon_round u_round (
-        .const_idx(4'((16 - ROUNDS) + round_count)),
+        .const_idx(const_idx_full[3:0]),
         .x0_in (x0_cur),
         .x1_in (x1_cur),
         .x2_in (x2_cur),
