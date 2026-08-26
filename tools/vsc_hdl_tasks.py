@@ -120,6 +120,132 @@ def find_render_target_module(selected_file, module_name, rtl_sources):
             return candidate
     return None
 
+# ---------------------------------------------------------------------------
+# Friendly names / shapes / colors for Yosys' internal RTLIL cell types.
+# Anything not in this table falls back to its raw $type name so nothing
+# silently goes unlabeled — it just won't look as pretty until you add it
+# here.
+#
+#   key             -> (friendly_label, shape,      fillcolor)
+# ---------------------------------------------------------------------------
+CELL_FRIENDLY = {
+    # arithmetic
+    "$add":         ("+",          "box",      "#dff0d8"),
+    "$sub":         ("\u2212",     "box",      "#dff0d8"),
+    "$mul":         ("\u00d7",     "box",      "#dff0d8"),
+    "$div":         ("\u00f7",     "box",      "#dff0d8"),
+    "$mod":         ("mod",        "box",      "#dff0d8"),
+    "$neg":         ("neg",        "box",      "#dff0d8"),
+    "$pos":         ("+ (unary)",  "box",      "#dff0d8"),
+
+    # comparators
+    "$eq":          ("==",         "box",      "#fcf3cf"),
+    "$ne":          ("!=",         "box",      "#fcf3cf"),
+    "$eqx":         ("=== ",       "box",      "#fcf3cf"),
+    "$nex":         ("!==",        "box",      "#fcf3cf"),
+    "$gt":          (">",          "box",      "#fcf3cf"),
+    "$ge":          (">=",         "box",      "#fcf3cf"),
+    "$lt":          ("<",          "box",      "#fcf3cf"),
+    "$le":          ("<=",         "box",      "#fcf3cf"),
+
+    # bitwise / word-level logic
+    "$and":         ("AND",        "box",      "#d6eaf8"),
+    "$or":          ("OR",         "box",      "#d6eaf8"),
+    "$xor":         ("XOR",        "box",      "#d6eaf8"),
+    "$xnor":        ("XNOR",       "box",      "#d6eaf8"),
+    "$not":         ("NOT",        "box",      "#d6eaf8"),
+    "$logic_and":   ("&&",         "box",      "#d6eaf8"),
+    "$logic_or":    ("||",         "box",      "#d6eaf8"),
+    "$logic_not":   ("!",          "box",      "#d6eaf8"),
+    "$reduce_and":  ("&-reduce",   "box",      "#d6eaf8"),
+    "$reduce_or":   ("|-reduce",   "box",      "#d6eaf8"),
+    "$reduce_xor":  ("^-reduce",   "box",      "#d6eaf8"),
+    "$reduce_xnor": ("^~-reduce",  "box",      "#d6eaf8"),
+    "$reduce_bool": ("nonzero?",   "box",      "#d6eaf8"),
+
+    # shifts
+    "$shl":         ("<<",         "box",      "#ebdef0"),
+    "$shr":         (">>",         "box",      "#ebdef0"),
+    "$sshl":        ("<<< ",       "box",      "#ebdef0"),
+    "$sshr":        (">>> ",       "box",      "#ebdef0"),
+    "$shift":       ("shift",      "box",      "#ebdef0"),
+    "$shiftx":      ("shift (x)",  "box",      "#ebdef0"),
+
+    # muxes / selection
+    "$mux":         ("MUX",        "diamond",  "#fadbd8"),
+    "$pmux":        ("MUX (pri.)", "diamond",  "#fadbd8"),
+    "$demux":       ("DEMUX",      "diamond",  "#fadbd8"),
+    "$procmux":     ("MUX",        "diamond",  "#fadbd8"),
+
+    # registers / storage (drawn with a register-style box)
+    "$dff":         ("REG",        "box3d",    "#d5f5e3"),
+    "$dffe":        ("REG (en)",   "box3d",    "#d5f5e3"),
+    "$adff":        ("REG (arst)", "box3d",    "#d5f5e3"),
+    "$adffe":       ("REG (arst,en)", "box3d", "#d5f5e3"),
+    "$sdff":        ("REG (srst)", "box3d",    "#d5f5e3"),
+    "$sdffe":       ("REG (srst,en)", "box3d", "#d5f5e3"),
+    "$aldff":       ("REG (aload)", "box3d",   "#d5f5e3"),
+    "$dlatch":      ("LATCH",      "box3d",    "#d5f5e3"),
+    "$ff":          ("REG",        "box3d",    "#d5f5e3"),
+    "$procdff":     ("REG",        "box3d",    "#d5f5e3"),
+
+    # constants / misc
+    "$const":       ("const",      "box",      "#eaeded"),
+}
+
+# Cell types (or type-prefixes) that represent storage — used to draw the
+# register/latch double-bordered symbol even for internal auto-generated
+# names like `$procdff$226` or `$auto$ff.cc:337:slice$238`.
+_REG_TYPES = {
+    "$dff", "$dffe", "$adff", "$adffe", "$sdff", "$sdffe",
+    "$aldff", "$dlatch", "$ff", "$procdff", "$opt_dff",
+}
+
+
+_SRC_CELL_RE = re.compile(r'([^/\\]+\.s?v):(\d+)\$(\d+)$')
+
+
+def _short_cell_id(cname):
+    """Shorten a Yosys cell name for display.
+
+    Cells derived straight from source (e.g.
+    '$add$/Users/you/rtl/ascon_permutation.v:39$156') carry the full
+    absolute file path, which makes labels huge. Collapse that down to
+    just 'ascon_permutation.v:39 #156'. Pass-generated names like
+    '$procdff$216' or '$auto$ff.cc:337:slice$238' are already short and
+    are returned unchanged.
+    """
+    m = _SRC_CELL_RE.search(cname)
+    if m:
+        return f"{m.group(1)}:{m.group(2)} #{m.group(3)}"
+    return cname
+
+
+def _friendly_cell_label(cname, ctype):
+    """Return (label, shape, fillcolor) for a cell, given its instance name
+    and Yosys $type. Falls back gracefully for unknown/auto-generated types."""
+    short_id = _short_cell_id(cname)
+
+    if ctype in CELL_FRIENDLY:
+        friendly, shape, color = CELL_FRIENDLY[ctype]
+        return f"{friendly}\n{short_id}", shape, color
+
+    # Auto-generated helper cells (e.g. "$auto$ff.cc:337:slice$238") don't
+    # have a clean $type match above, but often *are* a $dff/$adffe etc.
+    # under the hood — check the raw type again for a known register kind
+    # even if the outer match above missed a variant.
+    if ctype in _REG_TYPES or ctype.startswith("$adff") or ctype.startswith("$dff") or ctype.startswith("$sdff"):
+        return f"REG\n{short_id}", "box3d", "#d5f5e3"
+
+    if cname.startswith("$auto$"):
+        # Internal Yosys-generated helper (slice/join/etc.), not something
+        # from your RTL — label it plainly as such rather than a raw path.
+        return f"(internal helper)\n{ctype}", "box", "#f5f5f5"
+
+    # Unknown/unmapped cell type: show the raw type so it's still
+    # informative, just not yet given a friendly name in CELL_FRIENDLY.
+    return f"{short_id}\n({ctype})", "box", "#ffffff"
+
 
 def generate_simplified_dot(json_path, dot_path, top_module):
     """Generate a simplified hierarchical DOT from a Yosys write_json output.
@@ -127,6 +253,11 @@ def generate_simplified_dot(json_path, dot_path, top_module):
     The simplified graph collapses primitive gates and wires, showing only
     module instances, register cells, and top-level ports. This produces a
     readable, high-level netlist for sequential wrappers like ascon_permutation.
+
+    Cells are given friendly labels/shapes/colors from CELL_FRIENDLY instead
+    of raw Yosys $type strings, and are grouped into clusters (registers /
+    control-mux / datapath-arith / submodule instances / ports) so the
+    layout reads more like an actual schematic.
     """
     try:
         with open(json_path, 'r', encoding='utf-8') as fh:
@@ -157,22 +288,51 @@ def generate_simplified_dot(json_path, dot_path, top_module):
         for b in pinfo.get('bits', []):
             bit_to_nodes.setdefault(b, set()).add(f"port__{pname}")
 
-    # Build node labels and detect register-like cells
+    # Build node labels/shapes/colors and bucket cells into clusters
     module_names = set(modules.keys())
     node_labels = {}
+    node_shapes = {}
+    node_colors = {}
     regs = set()
+    clusters = {
+        "registers": [],
+        "control_mux": [],
+        "datapath": [],
+        "instances": [],
+        "other": [],
+    }
+
     for cname, cell in cells.items():
         ctype = cell.get('type', '')
+
         if ctype in module_names:
-            node_labels[cname] = f"{cname}\\n({ctype})"
+            # Submodule instance (e.g. an ascon_round instance) — keep this
+            # as its own box naming both the instance and the module type.
+            node_labels[cname] = f"{cname}\n[{ctype} instance]"
+            node_shapes[cname] = "component"
+            node_colors[cname] = "#d4e6f1"
+            clusters["instances"].append(cname)
+            continue
+
+        label, shape, color = _friendly_cell_label(cname, ctype)
+        node_labels[cname] = label
+        node_shapes[cname] = shape
+        node_colors[cname] = color
+
+        if shape == "box3d" or ctype in _REG_TYPES:
+            regs.add(cname)
+            clusters["registers"].append(cname)
+        elif shape == "diamond":
+            clusters["control_mux"].append(cname)
+        elif ctype.startswith("$auto$"):
+            clusters["other"].append(cname)
         else:
-            # primitives and regs
-            node_labels[cname] = f"{cname}\\n({ctype})"
-            if ctype in ("$dff", "$adff", "$adffst", "$dlatch"):
-                regs.add(cname)
+            clusters["datapath"].append(cname)
 
     for pname in ports.keys():
         node_labels[f"port__{pname}"] = pname
+        node_shapes[f"port__{pname}"] = "oval"
+        node_colors[f"port__{pname}"] = "#ffffff"
 
     # Collect edges between nodes that share a net bit
     edges = set()
@@ -185,19 +345,42 @@ def generate_simplified_dot(json_path, dot_path, top_module):
                 key = tuple(sorted((a, bnode)))
                 edges.add(key)
 
+    cluster_titles = {
+        "registers": "Registers",
+        "control_mux": "Control / Muxes",
+        "datapath": "Datapath (arith / logic)",
+        "instances": "Submodule instances",
+        "other": "Internal helpers",
+    }
+
     # Emit DOT
     try:
         with open(dot_path, 'w', encoding='utf-8') as fh:
             fh.write(f'digraph "{top_module}_simplified" {{\n')
-            fh.write('  rankdir=LR; splines=ortho; nodesep=0.6; ranksep=0.8;\n')
-            fh.write('  node [shape=box,fontname="Arial",fontsize=10];\n')
+            fh.write('  rankdir=LR; splines=ortho; nodesep=0.5; ranksep=0.9;\n')
+            fh.write('  node [fontname="Arial",fontsize=10,style=filled];\n')
+            fh.write('  edge [color="#666666"];\n')
 
-            for nid, lbl in node_labels.items():
-                shape = 'doublecircle' if nid in regs else 'box'
-                fh.write(f'  "{nid}" [label="{lbl}", shape={shape}];\n')
+            for cluster_key, members in clusters.items():
+                if not members:
+                    continue
+                fh.write(f'  subgraph cluster_{cluster_key} {{\n')
+                fh.write(f'    label="{cluster_titles[cluster_key]}";\n')
+                fh.write('    style=dashed; color="#aaaaaa"; fontname="Arial"; fontsize=11;\n')
+                for nid in members:
+                    lbl = node_labels[nid]
+                    shape = node_shapes.get(nid, "box")
+                    color = node_colors.get(nid, "#ffffff")
+                    fh.write(f'    "{nid}" [label="{lbl}", shape={shape}, fillcolor="{color}"];\n')
+                fh.write('  }\n')
+
+            # Ports live outside any cluster
+            for pname in ports.keys():
+                nid = f"port__{pname}"
+                fh.write(f'  "{nid}" [label="{node_labels[nid]}", shape=oval, fillcolor="#ffffff"];\n')
 
             for a, bnode in sorted(edges):
-                fh.write(f'  "{a}" -> "{bnode}" [dir=both, arrowhead=none, arrowtail=none, color="#666666"];\n')
+                fh.write(f'  "{a}" -> "{bnode}" [dir=both, arrowhead=none, arrowtail=none];\n')
 
             fh.write('}\n')
     except Exception as e:
@@ -205,7 +388,6 @@ def generate_simplified_dot(json_path, dot_path, top_module):
         return False
 
     return True
-
 
 # ---------------------------------------------------------------------------
 # sim
@@ -315,7 +497,6 @@ def cmd_waveform(workspace_root):
     print(f"▶ Opening most recent waveform: {dump_path}")
     subprocess.Popen([gtkwave, dump_path], cwd=workspace_root, start_new_session=True)
 
-
 # ---------------------------------------------------------------------------
 # schematic
 # ---------------------------------------------------------------------------
@@ -340,43 +521,90 @@ def cmd_schematic(workspace_root, selected_file):
     read_cmds = "; ".join(f"read_verilog -sv {f}" for f in rtl_sources)
 
     netlistsvg_bin = shutil.which("netlistsvg")
-
-    # Exact sequential-netlist schematic rendering path:
-    # - netlistsvg is a DAG renderer and crashes on feedback loops in
-    #   ascon_permutation (state_reg -> ascon_round -> state_reg)
-    # - Yosys' native `show -format dot` keeps the hierarchy and lets Graphviz
-    #   render the cyclic structure correctly without recursion overflow.
-    dot_path = os.path.join(build_dir, f"schematic_{module_name}.dot")
     dot_bin = shutil.which("dot")
-    if not dot_bin:
-        print("❌ Graphviz 'dot' not found. Install it first:")
-        print("   brew install graphviz")
-        sys.exit(1)
 
-    yosys_script = (
-        f"{read_cmds}; "
-        f"hierarchy -top {module_name}; "
-        f"proc; opt_clean; "
-        f"show -format dot -prefix {svg_out} {module_name}"
-    )
+    # ------------------------------------------------------------------
+    # Exact schematic: try netlistsvg FIRST (this is the renderer that
+    # actually draws proper gate/mux/dff symbols with clean routing —
+    # it's what makes ascon_pS / ascon_round look good).
+    #
+    # netlistsvg's DAG layout only chokes on sequential feedback
+    # (state_reg -> ascon_round -> state_reg) when the JSON still
+    # contains raw $adff (async-reset) cells, whose cycle-breaking
+    # semantics its dagre-based layout doesn't always resolve cleanly.
+    # `techmap -map +/adff2dff.v` rewrites each $adff into a plain
+    # $dff fed by a reset $mux, both of which netlistsvg draws
+    # natively and which correctly breaks the cycle for layout.
+    #
+    # NOTE: this techmap'd netlist is ONLY used for the schematic
+    # picture. It is never written back to rtl/, never used by the
+    # simulation task, and never touched by synthesis — it's a
+    # throwaway JSON purely for rendering.
+    # ------------------------------------------------------------------
+    exact_json = os.path.join(build_dir, f"{module_name}_exact.json")
+    netlistsvg_ok = False
 
-    print(f"▶ Generating exact schematic for module: {module_name} (Yosys + Graphviz)")
-    print("  ℹ netlistsvg fails on feedback-heavy sequential graphs; this direct dot pipeline is the correct renderer for the true top-level netlist.")
-    result = subprocess.run([yosys, "-p", yosys_script], cwd=workspace_root)
-    if result.returncode != 0:
-        print("❌ Yosys failed to generate the DOT view for the schematic.")
-        sys.exit(result.returncode)
+    if netlistsvg_bin:
+        print(f"▶ Generating exact schematic for module: {module_name} (netlistsvg)")
+        exact_script = (
+            f"{read_cmds}; "
+            f"hierarchy -top {module_name}; "
+            f"proc; "
+            f"techmap -map +/adff2dff.v; "
+            f"opt; "
+            f"write_json {exact_json}"
+        )
+        result = subprocess.run([yosys, "-p", exact_script], cwd=workspace_root)
+        if result.returncode == 0 and os.path.isfile(exact_json):
+            result = subprocess.run(
+                [netlistsvg_bin, exact_json, "-o", svg_path], cwd=workspace_root
+            )
+            if result.returncode == 0 and os.path.isfile(svg_path):
+                netlistsvg_ok = True
+                print(f"✅ Exact schematic written to {svg_path}")
+            else:
+                print("⚠ netlistsvg failed to render this module (likely an "
+                      "unsupported cell/topology) — falling back to Graphviz.")
+        else:
+            print("⚠ Yosys failed to produce JSON for netlistsvg — falling back to Graphviz.")
+    else:
+        print("ℹ netlistsvg not found on PATH — using Graphviz for the exact schematic.")
 
-    if not os.path.isfile(dot_path):
-        print(f"❌ Expected DOT file not found: {dot_path}")
-        sys.exit(1)
+    if not netlistsvg_ok:
+        # ------------------------------------------------------------
+        # Fallback: Yosys' native `show -format dot` + Graphviz.
+        # Keeps the hierarchy and can render cyclic/odd structures that
+        # netlistsvg can't, at the cost of a much uglier layout.
+        # ------------------------------------------------------------
+        if not dot_bin:
+            print("❌ Graphviz 'dot' not found. Install it first:")
+            print("   brew install graphviz")
+            sys.exit(1)
 
-    result = subprocess.run([dot_bin, "-Tsvg", dot_path, "-o", svg_path], cwd=workspace_root)
-    if result.returncode != 0 or not os.path.isfile(svg_path):
-        print("❌ Graphviz failed to render the DOT schematic to SVG.")
-        sys.exit(1)
+        dot_path = os.path.join(build_dir, f"schematic_{module_name}.dot")
+        yosys_script = (
+            f"{read_cmds}; "
+            f"hierarchy -top {module_name}; "
+            f"proc; opt_clean; "
+            f"show -format dot -prefix {svg_out} {module_name}"
+        )
 
-    print(f"✅ Exact schematic written to {svg_path}")
+        print(f"▶ Generating exact schematic for module: {module_name} (Yosys + Graphviz fallback)")
+        result = subprocess.run([yosys, "-p", yosys_script], cwd=workspace_root)
+        if result.returncode != 0:
+            print("❌ Yosys failed to generate the DOT view for the schematic.")
+            sys.exit(result.returncode)
+
+        if not os.path.isfile(dot_path):
+            print(f"❌ Expected DOT file not found: {dot_path}")
+            sys.exit(1)
+
+        result = subprocess.run([dot_bin, "-Tsvg", dot_path, "-o", svg_path], cwd=workspace_root)
+        if result.returncode != 0 or not os.path.isfile(svg_path):
+            print("❌ Graphviz failed to render the DOT schematic to SVG.")
+            sys.exit(1)
+
+        print(f"✅ Exact schematic written to {svg_path}")
 
     # Also create a simplified high-level DOT from the Yosys JSON and render it.
     # This collapses primitive gates into module/regs/ports nodes for readability.
@@ -390,11 +618,14 @@ def cmd_schematic(workspace_root, selected_file):
     if result.returncode == 0 and os.path.isfile(json_out):
         ok = generate_simplified_dot(json_out, simp_dot, module_name)
         if ok:
-            result = subprocess.run([dot_bin, "-Tsvg", simp_dot, "-o", simp_svg], cwd=workspace_root)
-            if result.returncode == 0 and os.path.isfile(simp_svg):
-                print(f"✅ Simplified schematic written to {simp_svg}")
+            if dot_bin:
+                result = subprocess.run([dot_bin, "-Tsvg", simp_dot, "-o", simp_svg], cwd=workspace_root)
+                if result.returncode == 0 and os.path.isfile(simp_svg):
+                    print(f"✅ Simplified schematic written to {simp_svg}")
+                else:
+                    print("⚠ Failed to render simplified DOT via Graphviz.")
             else:
-                print("⚠ Failed to render simplified DOT via Graphviz.")
+                print("⚠ Graphviz 'dot' not found — skipping simplified schematic render.")
         else:
             print("⚠ Failed to generate simplified DOT from Yosys JSON.")
     else:

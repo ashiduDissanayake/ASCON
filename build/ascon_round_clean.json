@@ -1,5 +1,5 @@
 {
-  "creator": "Yosys 0.67+94 (git sha1 7defa5186-dirty, Release, Clang /usr/local/osxcross/target/bin/aarch64-apple-darwin23.5-clang++ 18.1.8)",
+  "creator": "Yosys 0.67+post (git sha1 b8e7da6f40ae8f552c116bf6c359b07c6533e159, Release, AppleClang clang++ 21.0.0.21000099)",
   "modules": {
     "ascon_pC": {
       "attributes": {
