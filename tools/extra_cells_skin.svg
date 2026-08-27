@@ -1,0 +1,162 @@
+<!--
+  Extra netlistsvg component defs for cells that ship with NO symbol in
+  netlistsvg's default digital.svg skin (confirmed against netlistsvg
+  issue #104 — https://github.com/nturley/netlistsvg/issues/104).
+
+  This fragment is NOT a standalone skin. It gets merged into a copy of
+  your installed default skin by build_skin.py, right before the closing
+  </svg>, so you keep every symbol netlistsvg already draws well
+  (and/or/xor/not/mux/dff/comparators) and just fill in the gaps.
+
+  Port pids match Yosys' actual cell port names, so no RTLIL renaming is
+  needed:
+    unary  ($neg,$pos,$reduce_*)      -> A, Y
+    binary ($add,$sub,$mul,...)       -> A, B, Y
+    shifts ($shl,$shr,$sshl,$sshr,
+            $shift,$shiftx)           -> A, B, Y   (A=data, B=amount)
+
+  Shape language (so a reader can tell the *category* at a glance,
+  same principle your CELL_FRIENDLY table already uses):
+    trapezoid   -> arithmetic (add/sub/mul/div/mod)
+    parallelogram -> shifts
+    small notched box -> neg/pos (unary sign flip)
+    triangle    -> reduction ops (and/or/xor/xnor/bool across a bus)
+-->
+
+<!-- ============================ ARITHMETIC ============================ -->
+
+<g s:type="add" transform="translate(0,0)" s:width="42" s:height="40">
+  <s:alias val="$add"/>
+  <path d="M0,0 L30,8 L30,32 L0,40 Z"/>
+  <text x="13" y="24" text-anchor="middle" style="font-size:15px;stroke:none;fill:#000">+</text>
+  <g s:x="0" s:y="8" s:pid="A"/>
+  <g s:x="0" s:y="32" s:pid="B"/>
+  <g s:x="42" s:y="20" s:pid="Y"/>
+</g>
+
+<g s:type="sub" transform="translate(0,0)" s:width="42" s:height="40">
+  <s:alias val="$sub"/>
+  <path d="M0,0 L30,8 L30,32 L0,40 Z"/>
+  <text x="13" y="24" text-anchor="middle" style="font-size:16px;stroke:none;fill:#000">&#8722;</text>
+  <g s:x="0" s:y="8" s:pid="A"/>
+  <g s:x="0" s:y="32" s:pid="B"/>
+  <g s:x="42" s:y="20" s:pid="Y"/>
+</g>
+
+<g s:type="mul" transform="translate(0,0)" s:width="42" s:height="40">
+  <s:alias val="$mul"/>
+  <path d="M0,0 L30,8 L30,32 L0,40 Z"/>
+  <text x="13" y="24" text-anchor="middle" style="font-size:14px;stroke:none;fill:#000">&#215;</text>
+  <g s:x="0" s:y="8" s:pid="A"/>
+  <g s:x="0" s:y="32" s:pid="B"/>
+  <g s:x="42" s:y="20" s:pid="Y"/>
+</g>
+
+<g s:type="div" transform="translate(0,0)" s:width="42" s:height="40">
+  <s:alias val="$div"/>
+  <path d="M0,0 L30,8 L30,32 L0,40 Z"/>
+  <text x="13" y="24" text-anchor="middle" style="font-size:14px;stroke:none;fill:#000">&#247;</text>
+  <g s:x="0" s:y="8" s:pid="A"/>
+  <g s:x="0" s:y="32" s:pid="B"/>
+  <g s:x="42" s:y="20" s:pid="Y"/>
+</g>
+
+<g s:type="mod" transform="translate(0,0)" s:width="42" s:height="40">
+  <s:alias val="$mod"/>
+  <s:alias val="$modfloor"/>
+  <path d="M0,0 L30,8 L30,32 L0,40 Z"/>
+  <text x="13" y="24" text-anchor="middle" style="font-size:10px;stroke:none;fill:#000">mod</text>
+  <g s:x="0" s:y="8" s:pid="A"/>
+  <g s:x="0" s:y="32" s:pid="B"/>
+  <g s:x="42" s:y="20" s:pid="Y"/>
+</g>
+
+<g s:type="pow" transform="translate(0,0)" s:width="42" s:height="40">
+  <s:alias val="$pow"/>
+  <path d="M0,0 L30,8 L30,32 L0,40 Z"/>
+  <text x="13" y="24" text-anchor="middle" style="font-size:12px;stroke:none;fill:#000">^</text>
+  <g s:x="0" s:y="8" s:pid="A"/>
+  <g s:x="0" s:y="32" s:pid="B"/>
+  <g s:x="42" s:y="20" s:pid="Y"/>
+</g>
+
+<!-- ============================== UNARY ================================ -->
+
+<g s:type="neg" transform="translate(0,0)" s:width="32" s:height="22">
+  <s:alias val="$neg"/>
+  <path d="M0,0 L22,0 L26,11 L22,22 L0,22 Z"/>
+  <text x="12" y="15" text-anchor="middle" style="font-size:13px;stroke:none;fill:#000">&#8722;</text>
+  <g s:x="0" s:y="11" s:pid="A"/>
+  <g s:x="32" s:y="11" s:pid="Y"/>
+</g>
+
+<g s:type="pos" transform="translate(0,0)" s:width="32" s:height="22">
+  <s:alias val="$pos"/>
+  <path d="M0,0 L22,0 L26,11 L22,22 L0,22 Z"/>
+  <text x="12" y="15" text-anchor="middle" style="font-size:13px;stroke:none;fill:#000">+</text>
+  <g s:x="0" s:y="11" s:pid="A"/>
+  <g s:x="32" s:y="11" s:pid="Y"/>
+</g>
+
+<!-- ============================== SHIFTS ================================ -->
+<!-- Parallelogram = "things are sliding sideways", to read visually
+     distinct from the arithmetic trapezoids above. -->
+
+<g s:type="shl" transform="translate(0,0)" s:width="42" s:height="34">
+  <s:alias val="$shl"/>
+  <s:alias val="$sshl"/>
+  <path d="M8,0 L38,0 L30,34 L0,34 Z"/>
+  <text x="19" y="21" text-anchor="middle" style="font-size:11px;stroke:none;fill:#000">&lt;&lt;</text>
+  <g s:x="0" s:y="8" s:pid="A"/>
+  <g s:x="0" s:y="27" s:pid="B"/>
+  <g s:x="42" s:y="17" s:pid="Y"/>
+</g>
+
+<g s:type="shr" transform="translate(0,0)" s:width="42" s:height="34">
+  <s:alias val="$shr"/>
+  <s:alias val="$sshr"/>
+  <path d="M8,0 L38,0 L30,34 L0,34 Z"/>
+  <text x="19" y="21" text-anchor="middle" style="font-size:11px;stroke:none;fill:#000">&gt;&gt;</text>
+  <g s:x="0" s:y="8" s:pid="A"/>
+  <g s:x="0" s:y="27" s:pid="B"/>
+  <g s:x="42" s:y="17" s:pid="Y"/>
+</g>
+
+<g s:type="shift" transform="translate(0,0)" s:width="42" s:height="34">
+  <s:alias val="$shift"/>
+  <s:alias val="$shiftx"/>
+  <path d="M8,0 L38,0 L30,34 L0,34 Z"/>
+  <text x="19" y="21" text-anchor="middle" style="font-size:9px;stroke:none;fill:#000">shift</text>
+  <g s:x="0" s:y="8" s:pid="A"/>
+  <g s:x="0" s:y="27" s:pid="B"/>
+  <g s:x="42" s:y="17" s:pid="Y"/>
+</g>
+
+<!-- ============================ REDUCTIONS ============================== -->
+<!-- Triangle = classic "fan-in" symbol: a whole bus collapses to 1 bit. -->
+
+<g s:type="reduce_and" transform="translate(0,0)" s:width="30" s:height="26">
+  <s:alias val="$reduce_and"/>
+  <path d="M0,0 L0,26 L26,13 Z"/>
+  <text x="8" y="17" text-anchor="middle" style="font-size:10px;stroke:none;fill:#000">&amp;</text>
+  <g s:x="0" s:y="13" s:pid="A"/>
+  <g s:x="30" s:y="13" s:pid="Y"/>
+</g>
+
+<g s:type="reduce_or" transform="translate(0,0)" s:width="30" s:height="26">
+  <s:alias val="$reduce_or"/>
+  <s:alias val="$reduce_bool"/>
+  <path d="M0,0 L0,26 L26,13 Z"/>
+  <text x="8" y="17" text-anchor="middle" style="font-size:10px;stroke:none;fill:#000">|</text>
+  <g s:x="0" s:y="13" s:pid="A"/>
+  <g s:x="30" s:y="13" s:pid="Y"/>
+</g>
+
+<g s:type="reduce_xor" transform="translate(0,0)" s:width="30" s:height="26">
+  <s:alias val="$reduce_xor"/>
+  <s:alias val="$reduce_xnor"/>
+  <path d="M0,0 L0,26 L26,13 Z"/>
+  <text x="8" y="17" text-anchor="middle" style="font-size:10px;stroke:none;fill:#000">^</text>
+  <g s:x="0" s:y="13" s:pid="A"/>
+  <g s:x="30" s:y="13" s:pid="Y"/>
+</g>

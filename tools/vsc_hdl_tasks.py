@@ -497,6 +497,24 @@ def cmd_waveform(workspace_root):
     print(f"▶ Opening most recent waveform: {dump_path}")
     subprocess.Popen([gtkwave, dump_path], cwd=workspace_root, start_new_session=True)
 
+# Add this helper near tool_path() / module_name_from_file() at the top of
+# the file -- cmd_schematic below calls it.
+
+def skin_path(workspace_root):
+    """Resolve which netlistsvg skin to use, if any:
+      1. NETLISTSVG_SKIN env var, if set (explicit override).
+      2. build/skins/digital_extended.svg, if tools/build_skin.py has been
+         run (see that script).
+      3. None -- netlistsvg falls back to its own built-in default skin,
+         same as before any of this existed.
+    """
+    override = os.environ.get("NETLISTSVG_SKIN")
+    if override:
+        return os.path.abspath(override)
+    auto = os.path.join(workspace_root, "build", "skins", "digital_extended.svg")
+    return auto if os.path.isfile(auto) else None
+
+
 # ---------------------------------------------------------------------------
 # schematic
 # ---------------------------------------------------------------------------
@@ -522,6 +540,14 @@ def cmd_schematic(workspace_root, selected_file):
 
     netlistsvg_bin = shutil.which("netlistsvg")
     dot_bin = shutil.which("dot")
+
+    # Custom skin (adds symbols for $neg/$add/$sub/$mul/$shl/$shr/reduce_*
+    # etc, which netlistsvg's stock skin has no drawing for at all -- see
+    # tools/build_skin.py). None if it hasn't been generated; netlistsvg
+    # just uses its own built-in default skin in that case, same as before.
+    skin = skin_path(workspace_root)
+    if skin:
+        print(f"ℹ Using extended netlistsvg skin: {skin}")
 
     # ------------------------------------------------------------------
     # Exact schematic: try netlistsvg FIRST (this is the renderer that
@@ -556,9 +582,10 @@ def cmd_schematic(workspace_root, selected_file):
         )
         result = subprocess.run([yosys, "-p", exact_script], cwd=workspace_root)
         if result.returncode == 0 and os.path.isfile(exact_json):
-            result = subprocess.run(
-                [netlistsvg_bin, exact_json, "-o", svg_path], cwd=workspace_root
-            )
+            netlistsvg_cmd = [netlistsvg_bin, exact_json, "-o", svg_path]
+            if skin:
+                netlistsvg_cmd += ["--skin", skin]
+            result = subprocess.run(netlistsvg_cmd, cwd=workspace_root)
             if result.returncode == 0 and os.path.isfile(svg_path):
                 netlistsvg_ok = True
                 print(f"✅ Exact schematic written to {svg_path}")
@@ -645,13 +672,15 @@ def cmd_schematic(workspace_root, selected_file):
         print(f"ℹ Also generating a clean DAG render for submodule: {child_module}")
         result = subprocess.run([yosys, "-p", clean_script], cwd=workspace_root)
         if result.returncode == 0:
-            result = subprocess.run([netlistsvg_bin, clean_json, "-o", clean_svg], cwd=workspace_root)
+            clean_cmd = [netlistsvg_bin, clean_json, "-o", clean_svg]
+            if skin:
+                clean_cmd += ["--skin", skin]
+            result = subprocess.run(clean_cmd, cwd=workspace_root)
             if result.returncode == 0 and os.path.isfile(clean_svg):
                 print(f"✅ Clean submodule schematic written to {clean_svg}")
 
     open_file_cross_platform(svg_path)
     return
-
 
 # ---------------------------------------------------------------------------
 # depgraph

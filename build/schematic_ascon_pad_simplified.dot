@@ -1,0 +1,50 @@
+digraph "ascon_pad_simplified" {
+  rankdir=LR; splines=ortho; nodesep=0.5; ranksep=0.9;
+  node [fontname="Arial",fontsize=10,style=filled];
+  edge [color="#666666"];
+  subgraph cluster_control_mux {
+    label="Control / Muxes";
+    style=dashed; color="#aaaaaa"; fontname="Arial"; fontsize=11;
+    "$procmux$791" [label="MUX
+$procmux$791", shape=diamond, fillcolor="#fadbd8"];
+  }
+  subgraph cluster_datapath {
+    label="Datapath (arith / logic)";
+    style=dashed; color="#aaaaaa"; fontname="Arial"; fontsize=11;
+    "$and$/Users/ashidudissanayake/Dev/ASCON/rtl/ascon_pad.v:23$778" [label="AND
+ascon_pad.v:23 #778", shape=box, fillcolor="#d6eaf8"];
+    "$lt$/Users/ashidudissanayake/Dev/ASCON/rtl/ascon_pad.v:21$769" [label="<
+ascon_pad.v:21 #769", shape=box, fillcolor="#fcf3cf"];
+    "$neg$/Users/ashidudissanayake/Dev/ASCON/rtl/ascon_pad.v:23$779" [label="neg
+ascon_pad.v:23 #779", shape=box, fillcolor="#dff0d8"];
+    "$not$/Users/ashidudissanayake/Dev/ASCON/rtl/ascon_pad.v:23$777" [label="NOT
+ascon_pad.v:23 #777", shape=box, fillcolor="#d6eaf8"];
+    "$or$/Users/ashidudissanayake/Dev/ASCON/rtl/ascon_pad.v:23$781" [label="OR
+ascon_pad.v:23 #781", shape=box, fillcolor="#d6eaf8"];
+    "$shift$/Users/ashidudissanayake/Dev/ASCON/rtl/ascon_pad.v:23$776" [label="shift
+ascon_pad.v:23 #776", shape=box, fillcolor="#ebdef0"];
+    "$shift$/Users/ashidudissanayake/Dev/ASCON/rtl/ascon_pad.v:23$780" [label="shift
+ascon_pad.v:23 #780", shape=box, fillcolor="#ebdef0"];
+  }
+  "port__data_in" [label="data_in", shape=oval, fillcolor="#ffffff"];
+  "port__valid_bytes" [label="valid_bytes", shape=oval, fillcolor="#ffffff"];
+  "port__padded_out" [label="padded_out", shape=oval, fillcolor="#ffffff"];
+  "$and$/Users/ashidudissanayake/Dev/ASCON/rtl/ascon_pad.v:23$778" -> "$not$/Users/ashidudissanayake/Dev/ASCON/rtl/ascon_pad.v:23$777" [dir=both, arrowhead=none, arrowtail=none];
+  "$and$/Users/ashidudissanayake/Dev/ASCON/rtl/ascon_pad.v:23$778" -> "$or$/Users/ashidudissanayake/Dev/ASCON/rtl/ascon_pad.v:23$781" [dir=both, arrowhead=none, arrowtail=none];
+  "$and$/Users/ashidudissanayake/Dev/ASCON/rtl/ascon_pad.v:23$778" -> "$procmux$791" [dir=both, arrowhead=none, arrowtail=none];
+  "$and$/Users/ashidudissanayake/Dev/ASCON/rtl/ascon_pad.v:23$778" -> "port__data_in" [dir=both, arrowhead=none, arrowtail=none];
+  "$lt$/Users/ashidudissanayake/Dev/ASCON/rtl/ascon_pad.v:21$769" -> "$neg$/Users/ashidudissanayake/Dev/ASCON/rtl/ascon_pad.v:23$779" [dir=both, arrowhead=none, arrowtail=none];
+  "$lt$/Users/ashidudissanayake/Dev/ASCON/rtl/ascon_pad.v:21$769" -> "$procmux$791" [dir=both, arrowhead=none, arrowtail=none];
+  "$lt$/Users/ashidudissanayake/Dev/ASCON/rtl/ascon_pad.v:21$769" -> "$shift$/Users/ashidudissanayake/Dev/ASCON/rtl/ascon_pad.v:23$776" [dir=both, arrowhead=none, arrowtail=none];
+  "$lt$/Users/ashidudissanayake/Dev/ASCON/rtl/ascon_pad.v:21$769" -> "$shift$/Users/ashidudissanayake/Dev/ASCON/rtl/ascon_pad.v:23$780" [dir=both, arrowhead=none, arrowtail=none];
+  "$lt$/Users/ashidudissanayake/Dev/ASCON/rtl/ascon_pad.v:21$769" -> "port__valid_bytes" [dir=both, arrowhead=none, arrowtail=none];
+  "$neg$/Users/ashidudissanayake/Dev/ASCON/rtl/ascon_pad.v:23$779" -> "$shift$/Users/ashidudissanayake/Dev/ASCON/rtl/ascon_pad.v:23$776" [dir=both, arrowhead=none, arrowtail=none];
+  "$neg$/Users/ashidudissanayake/Dev/ASCON/rtl/ascon_pad.v:23$779" -> "$shift$/Users/ashidudissanayake/Dev/ASCON/rtl/ascon_pad.v:23$780" [dir=both, arrowhead=none, arrowtail=none];
+  "$neg$/Users/ashidudissanayake/Dev/ASCON/rtl/ascon_pad.v:23$779" -> "port__valid_bytes" [dir=both, arrowhead=none, arrowtail=none];
+  "$not$/Users/ashidudissanayake/Dev/ASCON/rtl/ascon_pad.v:23$777" -> "$shift$/Users/ashidudissanayake/Dev/ASCON/rtl/ascon_pad.v:23$776" [dir=both, arrowhead=none, arrowtail=none];
+  "$or$/Users/ashidudissanayake/Dev/ASCON/rtl/ascon_pad.v:23$781" -> "$procmux$791" [dir=both, arrowhead=none, arrowtail=none];
+  "$or$/Users/ashidudissanayake/Dev/ASCON/rtl/ascon_pad.v:23$781" -> "$shift$/Users/ashidudissanayake/Dev/ASCON/rtl/ascon_pad.v:23$780" [dir=both, arrowhead=none, arrowtail=none];
+  "$procmux$791" -> "port__data_in" [dir=both, arrowhead=none, arrowtail=none];
+  "$procmux$791" -> "port__padded_out" [dir=both, arrowhead=none, arrowtail=none];
+  "$shift$/Users/ashidudissanayake/Dev/ASCON/rtl/ascon_pad.v:23$776" -> "$shift$/Users/ashidudissanayake/Dev/ASCON/rtl/ascon_pad.v:23$780" [dir=both, arrowhead=none, arrowtail=none];
+}

@@ -1,0 +1,33 @@
+digraph "ascon_keyxor_simplified" {
+  rankdir=LR; splines=ortho; nodesep=0.5; ranksep=0.9;
+  node [fontname="Arial",fontsize=10,style=filled];
+  edge [color="#666666"];
+  subgraph cluster_datapath {
+    label="Datapath (arith / logic)";
+    style=dashed; color="#aaaaaa"; fontname="Arial"; fontsize=11;
+    "$xor$/Users/ashidudissanayake/Dev/ASCON/rtl/ascon_keyxor.v:25$633" [label="XOR
+ascon_keyxor.v:25 #633", shape=box, fillcolor="#d6eaf8"];
+    "$xor$/Users/ashidudissanayake/Dev/ASCON/rtl/ascon_keyxor.v:26$634" [label="XOR
+ascon_keyxor.v:26 #634", shape=box, fillcolor="#d6eaf8"];
+  }
+  "port__x0_in" [label="x0_in", shape=oval, fillcolor="#ffffff"];
+  "port__x1_in" [label="x1_in", shape=oval, fillcolor="#ffffff"];
+  "port__x2_in" [label="x2_in", shape=oval, fillcolor="#ffffff"];
+  "port__x3_in" [label="x3_in", shape=oval, fillcolor="#ffffff"];
+  "port__x4_in" [label="x4_in", shape=oval, fillcolor="#ffffff"];
+  "port__key" [label="key", shape=oval, fillcolor="#ffffff"];
+  "port__x0_out" [label="x0_out", shape=oval, fillcolor="#ffffff"];
+  "port__x1_out" [label="x1_out", shape=oval, fillcolor="#ffffff"];
+  "port__x2_out" [label="x2_out", shape=oval, fillcolor="#ffffff"];
+  "port__x3_out" [label="x3_out", shape=oval, fillcolor="#ffffff"];
+  "port__x4_out" [label="x4_out", shape=oval, fillcolor="#ffffff"];
+  "$xor$/Users/ashidudissanayake/Dev/ASCON/rtl/ascon_keyxor.v:25$633" -> "port__key" [dir=both, arrowhead=none, arrowtail=none];
+  "$xor$/Users/ashidudissanayake/Dev/ASCON/rtl/ascon_keyxor.v:25$633" -> "port__x3_in" [dir=both, arrowhead=none, arrowtail=none];
+  "$xor$/Users/ashidudissanayake/Dev/ASCON/rtl/ascon_keyxor.v:25$633" -> "port__x3_out" [dir=both, arrowhead=none, arrowtail=none];
+  "$xor$/Users/ashidudissanayake/Dev/ASCON/rtl/ascon_keyxor.v:26$634" -> "port__key" [dir=both, arrowhead=none, arrowtail=none];
+  "$xor$/Users/ashidudissanayake/Dev/ASCON/rtl/ascon_keyxor.v:26$634" -> "port__x4_in" [dir=both, arrowhead=none, arrowtail=none];
+  "$xor$/Users/ashidudissanayake/Dev/ASCON/rtl/ascon_keyxor.v:26$634" -> "port__x4_out" [dir=both, arrowhead=none, arrowtail=none];
+  "port__x0_in" -> "port__x0_out" [dir=both, arrowhead=none, arrowtail=none];
+  "port__x1_in" -> "port__x1_out" [dir=both, arrowhead=none, arrowtail=none];
+  "port__x2_in" -> "port__x2_out" [dir=both, arrowhead=none, arrowtail=none];
+}

@@ -46,6 +46,24 @@
 //   length counters itself, so callers never need to compute padding or
 //   assert an external "last" flag. AD/PT lengths of 0 are handled without
 //   requiring any beat on that stream at all.
+//
+// WHY THIS ISN'T WRAPPED IN ascon_io_if
+//   ad_ready/ad_valid, pc_ready/pc_valid, and pc_valid_out/pc_ready_in
+//   above are already a native, correctly-handshaked ready/valid interface
+//   driven straight off the FSM -- there's no separate internal "IO
+//   holding register" here duplicating what ascon_io_if.v does. ascon_io_if
+//   is a one-slot skid buffer meant to sit *outside* a core like this one
+//   (see its own header), e.g. as the register slice inside an
+//   AXI-Stream/Avalon-ST adapter wrapping ascon_controller for a specific
+//   bus, or to decouple this core's timing from an upstream/downstream
+//   block on a different clock-enable schedule. Instantiating it on these
+//   ports internally would only add a redundant pipeline stage with no
+//   corresponding logic being replaced, so it's left as a standalone
+//   building block for that future adapter rather than forced in here.
+//   ascon_pad.v, by contrast, genuinely was being reimplemented inline
+//   (the single-line "insert 0x01 at byte `valid`" case in
+//   ad_lane_update/pc_lane_update) and is now instantiated for real; see
+//   u_ad_pad/u_pc_pad below.
 module ascon_controller (
     input  wire         clk,
     input  wire         rst_n,
@@ -115,6 +133,41 @@ module ascon_controller (
     wire [63:0] key_w1 = key_reg[63:0];
 
     // ------------------------------------------------------------------
+    // Padding: delegated to ascon_pad instead of duplicating the "insert
+    // 0x01 at the first empty byte position" rule inline. One instance per
+    // stream (AD, PC) is enough -- both are pure combinational lookups, so
+    // it's fine that each is "computed" every cycle even in states where
+    // its result isn't consulted.
+    //
+    // valid_bytes for each stream is derived straight from *_remaining, so
+    // this is correct in every state that reads it, including the
+    // synthetic all-pad S_AD_EXTRA/S_PC_EXTRA blocks: by construction
+    // those states are only ever entered once *_remaining has already
+    // dropped to 0 (see S_AD_WAIT/S_PC_ABSORB below), which makes
+    // ad_valid_bytes_w/pc_valid_bytes_w evaluate to 0 there automatically
+    // -- no separate zero-literal call site needed. Bytes beyond
+    // valid_bytes are masked out downstream in ad_lane_update/
+    // pc_lane_update regardless of what ascon_pad leaves in that range, so
+    // ad_data/pc_data_reg holding a stale beat during those states is
+    // harmless.
+    // ------------------------------------------------------------------
+    wire [4:0]   ad_valid_bytes_w = (ad_remaining >= 32'd16) ? 5'd16 : ad_remaining[4:0];
+    wire [127:0] ad_padded_w;
+    ascon_pad u_ad_pad (
+        .data_in    (ad_data),
+        .valid_bytes(ad_valid_bytes_w),
+        .padded_out (ad_padded_w)
+    );
+
+    wire [4:0]   pc_valid_bytes_w = (pc_remaining >= 32'd16) ? 5'd16 : pc_remaining[4:0];
+    wire [127:0] pc_padded_w;
+    ascon_pad u_pc_pad (
+        .data_in    (pc_data_reg),
+        .valid_bytes(pc_valid_bytes_w),
+        .padded_out (pc_padded_w)
+    );
+
+    // ------------------------------------------------------------------
     // ascon_permutation instances: ROUNDS is elaboration-time only, so we
     // instantiate both round counts Ascon-AEAD128 needs and only pulse the
     // one relevant to the current phase.
@@ -157,15 +210,16 @@ module ascon_controller (
     // ------------------------------------------------------------------
     // AD absorption helper: rate-word (S0,S1) update for one <=16-byte
     // block, by byte lane, in the ad_data/pc_data stream-order convention
-    // (bit [8*i +: 8] = stream byte i). `valid` bytes (0..16) are real
-    // payload; the byte immediately after them gets the 0x01 pad; bytes
-    // beyond that are left untouched. AD absorption is always the
+    // (bit [8*i +: 8] = stream byte i). `padded_data` is ascon_pad's
+    // output (real payload for i<valid, the 0x01 pad byte at i==valid);
+    // bytes beyond that (i>valid) are left untouched regardless of what
+    // ascon_pad passes through there. AD absorption is always the
     // "new = old ^ payload" direction, matching
     // ascon_process_associated_data.
     // ------------------------------------------------------------------
     function automatic [127:0] ad_lane_update;
-        input [127:0] s_old;   // {S1(bytes8-15), S0(bytes0-7)}, stream order
-        input [127:0] data;    // same convention
+        input [127:0] s_old;        // {S1(bytes8-15), S0(bytes0-7)}, stream order
+        input [127:0] padded_data;  // ascon_pad(data, valid), same convention
         input [4:0]   valid;
         integer i;
         reg [7:0] sb, db, nb;
@@ -173,11 +227,9 @@ module ascon_controller (
         begin
             for (i = 0; i < 16; i = i + 1) begin
                 sb = s_old[i*8 +: 8];
-                db = data[i*8 +: 8];
-                if (i < valid)
+                db = padded_data[i*8 +: 8];
+                if (i <= valid)
                     nb = sb ^ db;
-                else if (i == valid)
-                    nb = sb ^ 8'h01;
                 else
                     nb = sb;
                 out[i*8 +: 8] = nb;
@@ -194,7 +246,7 @@ module ascon_controller (
     // ------------------------------------------------------------------
     function automatic [255:0] pc_lane_update;
         input [127:0] s_old;
-        input [127:0] data;
+        input [127:0] padded_data;  // ascon_pad(data, valid)
         input [4:0]   valid;
         input         dec;
         integer i;
@@ -203,7 +255,7 @@ module ascon_controller (
         begin
             for (i = 0; i < 16; i = i + 1) begin
                 sb = s_old[i*8 +: 8];
-                db = data[i*8 +: 8];
+                db = padded_data[i*8 +: 8];
                 if (i < valid) begin
                     if (dec) begin
                         nb = db;
@@ -213,7 +265,7 @@ module ascon_controller (
                         ob = nb;
                     end
                 end else if (i == valid) begin
-                    nb = sb ^ 8'h01;
+                    nb = sb ^ db;  // db == 8'h01, the pad byte from ascon_pad
                     ob = 8'h00;
                 end else begin
                     nb = sb;
@@ -342,14 +394,12 @@ module ascon_controller (
                     ad_ready <= 1'b1;
                     if (ad_valid) begin
                         begin : ad_absorb
-                            reg [4:0]   valid_bytes;
                             reg [127:0] updated;
-                            valid_bytes = (ad_remaining >= 32'd16) ? 5'd16 : ad_remaining[4:0];
-                            updated     = ad_lane_update({s1, s0}, ad_data, valid_bytes);
+                            updated = ad_lane_update({s1, s0}, ad_padded_w, ad_valid_bytes_w);
                             state_reg[319:256] <= updated[63:0];
                             state_reg[255:192] <= updated[127:64];
                             cur_final        <= (ad_remaining <= 32'd16);
-                            ad_extra_pending <= (ad_remaining <= 32'd16) && (valid_bytes == 5'd16);
+                            ad_extra_pending <= (ad_remaining <= 32'd16) && (ad_valid_bytes_w == 5'd16);
                             ad_remaining     <= (ad_remaining > 32'd16) ? (ad_remaining - 32'd16) : 32'd0;
                         end
                         perm_b_start <= 1'b1;
@@ -371,10 +421,13 @@ module ascon_controller (
 
                 // Synthetic empty AD block for the exact-rate-multiple case
                 // (still followed by a b-round permute, unlike PT/CT).
+                // ad_remaining is guaranteed 0 here (see S_AD_WAIT above),
+                // so ad_valid_bytes_w/ad_padded_w already evaluate as the
+                // "empty block" case -- no separate zero-literal call.
                 S_AD_EXTRA: begin
                     begin : ad_extra_absorb
                         reg [127:0] updated;
-                        updated = ad_lane_update({s1, s0}, 128'd0, 5'd0);
+                        updated = ad_lane_update({s1, s0}, ad_padded_w, ad_valid_bytes_w);
                         state_reg[319:256] <= updated[63:0];
                         state_reg[255:192] <= updated[127:64];
                     end
@@ -417,19 +470,17 @@ module ascon_controller (
 
                 S_PC_ABSORB: begin
                     begin : pc_absorb
-                        reg [4:0]   valid_bytes;
                         reg [255:0] result;
-                        valid_bytes = (pc_remaining >= 32'd16) ? 5'd16 : pc_remaining[4:0];
-                        result      = pc_lane_update({s1, s0}, pc_data_reg, valid_bytes, decrypt_reg);
+                        result = pc_lane_update({s1, s0}, pc_padded_w, pc_valid_bytes_w, decrypt_reg);
                         state_reg[319:256] <= result[255:192];
                         state_reg[255:192] <= result[191:128];
                         cur_final        <= (pc_remaining <= 32'd16);
                         pc_final         <= (pc_remaining <= 32'd16);
-                        pc_extra_pending <= (pc_remaining <= 32'd16) && (valid_bytes == 5'd16);
+                        pc_extra_pending <= (pc_remaining <= 32'd16) && (pc_valid_bytes_w == 5'd16);
                         pc_remaining     <= (pc_remaining > 32'd16) ? (pc_remaining - 32'd16) : 32'd0;
-                        if (valid_bytes != 5'd0) begin
+                        if (pc_valid_bytes_w != 5'd0) begin
                             pc_data_out  <= result[127:0];
-                            pc_bytes_out <= valid_bytes;
+                            pc_bytes_out <= pc_valid_bytes_w;
                             pc_last_out  <= (pc_remaining <= 32'd16);
                             pc_valid_out <= 1'b1;
                             fsm_state    <= S_PC_OUT_WAIT;
@@ -467,10 +518,14 @@ module ascon_controller (
                 // Synthetic empty PT/CT block for the exact-rate-multiple
                 // case. No permute follows (finalization's permute takes
                 // its place), and it produces no output bytes.
+                // pc_remaining is guaranteed 0 here (see S_PC_ABSORB
+                // above), so pc_valid_bytes_w/pc_padded_w already evaluate
+                // as the "empty block" case -- no separate zero-literal
+                // call.
                 S_PC_EXTRA: begin
                     begin : pc_extra_absorb
                         reg [255:0] result;
-                        result = pc_lane_update({s1, s0}, 128'd0, 5'd0, decrypt_reg);
+                        result = pc_lane_update({s1, s0}, pc_padded_w, pc_valid_bytes_w, decrypt_reg);
                         state_reg[319:256] <= result[255:192];
                         state_reg[255:192] <= result[191:128];
                     end

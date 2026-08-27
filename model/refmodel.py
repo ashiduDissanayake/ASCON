@@ -133,5 +133,32 @@ def decrypt(key: bytes, nonce: bytes, ad: bytes, ct: bytes, tag: bytes) -> bytes
     return ascon.ascon_decrypt(key, nonce, ad, ct + tag, "Ascon-AEAD128")
 
 
+def decrypt_raw(key: bytes, nonce: bytes, ad: bytes, ct: bytes) -> tuple[bytes, bytes]:
+    """Run the Ascon-AEAD128 decrypt datapath and return
+    ``(plaintext, computed_tag)`` unconditionally, i.e. without gating the
+    return value on a tag match the way ``ascon.ascon_decrypt``/``decrypt``
+    above do.
+
+    This mirrors what ascon_controller.v actually does on the wire: the
+    core streams pc_data_out and computes tag_out regardless of whether
+    auth_ok ends up asserted -- the "authentication before actuation"
+    behaviour lives in the consumer (a temporary command buffer that
+    discards the bytes on auth failure), not in the datapath itself. Used
+    to build negative-test controller vectors, where the expected RTL byte
+    stream must be known even when the supplied tag is deliberately wrong.
+    """
+    _validate(key, nonce)
+    state = [0, 0, 0, 0, 0]
+    k = len(key) * 8
+    a = 12
+    b = 8
+    rate = 16
+    ascon.ascon_initialize(state, k, rate, a, b, 1, key, nonce)
+    ascon.ascon_process_associated_data(state, b, rate, ad)
+    plaintext = ascon.ascon_process_ciphertext(state, b, rate, ct)
+    computed_tag = ascon.ascon_finalize(state, rate, a, key)
+    return plaintext, computed_tag
+
+
 if __name__ == "__main__":
     encrypt(bytes(16), bytes(16), b"", b"", trace=True)

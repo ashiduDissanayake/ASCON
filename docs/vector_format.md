@@ -45,3 +45,26 @@ All four files are derived from `model/refmodel.py::permutation_stages`, which r
 ```sh
 python3 model/gen_vectors.py
 ```
+
+## Controller (full AEAD) vectors
+
+`vectors/controller_cases.vec`, consumed by `tb/ascon_controller_tb.v`, drives `ascon_controller` end to end -- `start` through `done` -- rather than just the permutation core. It is whitespace-separated and positional (no field labels), one record per line, with this field order:
+
+```text
+dir key nonce
+ad_len ad_beat[0] ad_beat[1] ...
+pc_len pc_beat[0] pc_beat[1] ...
+tag_in
+exp_beat[0] exp_beat[1] ...
+exp_tag exp_auth_ok
+```
+
+- `dir`: `0` = encrypt, `1` = decrypt+verify.
+- `key`, `nonce`, `tag_in`, `exp_tag`: 128-bit hex, same word-first-in-high-bits convention as `ascon_controller`'s own `key`/`nonce`/`tag_in`/`tag_out` ports.
+- `ad_len`, `pc_len`: decimal byte counts (`pc_len` excludes the 16-byte tag). `pc_in` is the plaintext for `dir=0` or the ciphertext for `dir=1`.
+- `ad_beat[i]` / `pc_beat[i]`: `ceil(len/16)` beats each, 128-bit hex, zero-padded to a full 16-byte block. Packed stream-order (bit `[8*i +: 8]` = stream byte `i`), matching `ad_data`/`pc_data_in`/`pc_data_out`'s own convention -- so a beat can be read directly into a 128-bit reg with a plain `%h`. A length of 0 contributes zero beats.
+- `exp_beat[i]`: the expected output stream (ciphertext for `dir=0`, plaintext for `dir=1`), same count and packing as `pc_beat[i]`.
+- `exp_auth_ok`: `0` or `1`, meaningful only when `dir=1`.
+
+For negative-security cases (tampered ciphertext/tag, wrong key/nonce, modified AD) the expected output stream and tag are still the RTL's actual byte-exact result -- computed via `refmodel.decrypt_raw`, not assumed to equal the original plaintext -- since `ascon_controller` streams `pc_data_out` and computes `tag_out` unconditionally, independent of the later `auth_ok` check. See `model/gen_vectors.py::controller_cases` for how each case is built, and the proposal's §3.5/§6.4 for the authentication-before-actuation rationale these cases exercise.
+
