@@ -322,7 +322,7 @@ text {
 <g s:type="reduce_and" transform="translate(0,0)" s:width="30" s:height="26">
   <s:alias val="$reduce_and"/>
   <path d="M0,0 L0,26 L26,13 Z"/>
-  <text x="8" y="17" text-anchor="middle" style="font-size:10px;stroke:none;fill:#000">&amp;</text>
+  <text x="8" y="17" text-anchor="middle" style="font-size:14px;stroke:none;fill:#000">&#8743;</text>
   <g s:x="0" s:y="13" s:pid="A"/>
   <g s:x="30" s:y="13" s:pid="Y"/>
 </g>

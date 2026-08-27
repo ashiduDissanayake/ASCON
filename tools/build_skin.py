@@ -20,6 +20,7 @@ point straight at it and re-run:
 """
 
 import os
+import re
 import sys
 import glob
 import shutil
@@ -27,6 +28,68 @@ import subprocess
 
 
 EXTRA_SKIN_FRAGMENT = "extra_cells_skin.svg"  # sits next to this script
+
+# netlistsvg round-trips each symbol's <text> content through its own DOM
+# (decoding &amp;/&lt;/&gt;) and then serializes the final schematic SVG
+# WITHOUT re-escaping that text (nturley/netlistsvg#104). So a <text> node
+# in *this* fragment that is correctly escaped can still come back out as
+# a bare &, <, or > in netlistsvg's generated output and break its XML.
+# Anything decoding to one of these three characters must be replaced
+# with a non-reserved lookalike (see the glyph-choice note atop
+# extra_cells_skin.svg) before it reaches merge().
+_RESERVED_GLYPH_ENTITIES = {
+    "&amp;": "&", "&#38;": "&", "&#x26;": "&",
+    "&lt;": "<", "&#60;": "<", "&#x3c;": "<", "&#x3C;": "<",
+    "&gt;": ">", "&#62;": ">", "&#x3e;": ">", "&#x3E;": ">",
+}
+
+
+def check_no_reserved_glyphs(fragment_path, fragment_text):
+    """Scan every <text>...</text> node in the fragment for content that
+    would decode to &, <, or > -- these break netlistsvg's output even
+    though they're valid, correctly-escaped XML right here in the skin.
+    Raises ValueError naming the offending line so it fails loudly at
+    build time instead of producing a corrupt schematic later."""
+    # Strip XML comments first -- explanatory prose in a header comment
+    # (like this file's own glyph-choice note) can otherwise contain a
+    # stray "<text" or entity name that confuses the tag-content regex
+    # below into spanning past the comment into real symbol definitions.
+    code_only = re.sub(r"<!--.*?-->", "", fragment_text, flags=re.S)
+
+    problems = []
+    for m in re.finditer(r"<text\b[^>]*>(.*?)</text>", code_only, re.S):
+        content = m.group(1)
+        line_no = code_only.count("\n", 0, m.start()) + 1
+        for entity, literal in _RESERVED_GLYPH_ENTITIES.items():
+            if entity in content:
+                problems.append((line_no, entity, literal))
+        # A raw, unescaped &, <, or > inside a <text> node is already
+        # invalid XML on its own (this is what line 805 looked like
+        # before the fix) -- catch that too, not just the escaped form.
+        for literal in ("&", "<", ">"):
+            if literal in content and not any(
+                content[i:i + len(e)] == e
+                for i in range(len(content))
+                for e in _RESERVED_GLYPH_ENTITIES
+                if literal in e
+            ):
+                if re.search(re.escape(literal) + r"(?!(amp|lt|gt|#\d+|#x[0-9a-fA-F]+);)", content):
+                    problems.append((line_no, literal, literal))
+
+    if problems:
+        lines = "\n".join(
+            f"   - line {ln}: label decodes to {lit!r} (via {ent!r})"
+            for ln, ent, lit in problems
+        )
+        raise ValueError(
+            f"{fragment_path} has <text> glyphs that decode to a reserved "
+            f"XML character (&, <, or >). These survive escaping here but "
+            f"come back out UNESCAPED in netlistsvg's generated schematics "
+            f"(nturley/netlistsvg#104), corrupting the output SVG.\n"
+            f"{lines}\n"
+            f"   Replace with a non-reserved lookalike instead, e.g.\n"
+            f"   AND -> &#8743;  (\u2227)   <<  -> &#8810;  (\u226a)   >>  -> &#8811;  (\u226b)"
+        )
 
 
 def looks_like_a_skin(path):
@@ -113,6 +176,11 @@ def find_default_skin():
 def merge(default_skin_path, extra_fragment_path, out_path):
     base = open(default_skin_path, "r", encoding="utf-8").read()
     extra = open(extra_fragment_path, "r", encoding="utf-8").read()
+
+    # Catch reserved-character glyphs (&, <, >) before they ever reach the
+    # merged skin -- see check_no_reserved_glyphs() for why these break
+    # netlistsvg's output even when correctly escaped in this file.
+    check_no_reserved_glyphs(extra_fragment_path, extra)
 
     # Strip the extra fragment's own leading XML comment block so we don't
     # nest comments inside comments -- drop everything up to (and

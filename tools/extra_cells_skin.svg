@@ -21,6 +21,27 @@
     parallelogram -> shifts
     small notched box -> neg/pos (unary sign flip)
     triangle    -> reduction ops (and/or/xor/xnor/bool across a bus)
+
+  IMPORTANT -- glyph choice rule (do not use &, <, or > in any label):
+  netlistsvg parses each symbol's <text> content through its own DOM,
+  which decodes &amp;/&lt;/&gt; back to literal &/</>, then serializes
+  the final schematic SVG WITHOUT re-escaping that text (see
+  https://github.com/nturley/netlistsvg/issues/104). Escaping the
+  entity correctly in *this* file does not protect you -- the bug is
+  in netlistsvg's output writer, not in how this fragment is authored,
+  so any label that decodes to &, <, or > will re-emerge unescaped in
+  the generated schematic and produce invalid XML (browsers fail with
+  "xmlParseEntityRef: no name" partway through the file).
+  Numeric char refs like &#8722; (-), &#215; (x), &#247; (div) are safe
+  because they decode to characters that aren't XML metacharacters.
+  For AND/shift glyphs, use the non-reserved Unicode lookalikes instead:
+    AND        -> &#8743; (u+2227 LOGICAL AND, "^" wedge)      NOT &amp; / "&"
+    left shift -> &#8810; (u+226A MUCH LESS-THAN, "<<")        NOT &lt;&lt;
+    right shift-> &#8811; (u+226B MUCH GREATER-THAN, ">>")     NOT &gt;&gt;
+  build_skin.py's merge() validates the merged skin against this rule
+  automatically -- see check_no_reserved_glyphs() -- so a future
+  addition here that reintroduces &/</> in a <text> node will fail
+  loudly at build time instead of silently corrupting schematics later.
 -->
 
 <!-- ============================ ARITHMETIC ============================ -->
@@ -106,7 +127,7 @@
   <s:alias val="$shl"/>
   <s:alias val="$sshl"/>
   <path d="M8,0 L38,0 L30,34 L0,34 Z"/>
-  <text x="19" y="21" text-anchor="middle" style="font-size:11px;stroke:none;fill:#000">&lt;&lt;</text>
+  <text x="19" y="21" text-anchor="middle" style="font-size:13px;stroke:none;fill:#000">&#8810;</text>
   <g s:x="0" s:y="8" s:pid="A"/>
   <g s:x="0" s:y="27" s:pid="B"/>
   <g s:x="42" s:y="17" s:pid="Y"/>
@@ -116,7 +137,7 @@
   <s:alias val="$shr"/>
   <s:alias val="$sshr"/>
   <path d="M8,0 L38,0 L30,34 L0,34 Z"/>
-  <text x="19" y="21" text-anchor="middle" style="font-size:11px;stroke:none;fill:#000">&gt;&gt;</text>
+  <text x="19" y="21" text-anchor="middle" style="font-size:13px;stroke:none;fill:#000">&#8811;</text>
   <g s:x="0" s:y="8" s:pid="A"/>
   <g s:x="0" s:y="27" s:pid="B"/>
   <g s:x="42" s:y="17" s:pid="Y"/>
@@ -138,7 +159,7 @@
 <g s:type="reduce_and" transform="translate(0,0)" s:width="30" s:height="26">
   <s:alias val="$reduce_and"/>
   <path d="M0,0 L0,26 L26,13 Z"/>
-  <text x="8" y="17" text-anchor="middle" style="font-size:10px;stroke:none;fill:#000">&amp;</text>
+  <text x="8" y="17" text-anchor="middle" style="font-size:14px;stroke:none;fill:#000">&#8743;</text>
   <g s:x="0" s:y="13" s:pid="A"/>
   <g s:x="30" s:y="13" s:pid="Y"/>
 </g>
