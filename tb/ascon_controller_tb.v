@@ -55,17 +55,32 @@ module ascon_controller_tb;
     wire [127:0] pc_data_out;
     wire [4:0]   pc_bytes_out;
     wire         pc_last_out;
+    
+    // TOOL: Swaps bytes inside the two 64-bit halves independently!
+        function [127:0] dual_swap_64;
+            input [127:0] in;
+            integer i;
+            begin
+                // 1. Flip the bytes inside the bottom 64 bits
+                for (i = 0; i < 8; i = i + 1)
+                    dual_swap_64[(7-i)*8 +: 8] = in[i*8 +: 8];
+                    
+                // 2. Flip the bytes inside the top 64 bits
+                for (i = 0; i < 8; i = i + 1)
+                    dual_swap_64[64 + (7-i)*8 +: 8] = in[64 + i*8 +: 8];
+            end
+        endfunction
 
     ascon_controller dut (
         .clk         (clk),
         .rst_n       (rst_n),
         .start       (start),
         .decrypt     (decrypt),
-        .key         (key),
-        .nonce       (nonce),
+        .key         (dual_swap_64(key)),
+        .nonce       (dual_swap_64(nonce)),
         .ad_len      (ad_len),
         .pc_len      (pc_len),
-        .tag_in      (tag_in),
+        .tag_in      (dual_swap_64(tag_in)),
         .busy        (busy),
         .done        (done),
         .auth_ok     (auth_ok),
@@ -214,7 +229,7 @@ module ascon_controller_tb;
                 vector_ok = 1'b1;
                 if (beat_lost)                                vector_ok = 1'b0;
                 if (out_beat_count !== pc_beat_count)          vector_ok = 1'b0;
-                if (tag_out !== exp_tag)                       vector_ok = 1'b0;
+                if (tag_out !== dual_swap_64(exp_tag)) vector_ok = 1'b0;
                 if (dir_i == 1 && auth_ok !== exp_auth_ok_i[0]) vector_ok = 1'b0;
                 if (vector_ok) begin
                     for (j = 0; j < pc_beat_count; j = j + 1)

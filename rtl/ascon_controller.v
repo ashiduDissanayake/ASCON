@@ -472,8 +472,8 @@ module ascon_controller (
                     begin : pc_absorb
                         reg [255:0] result;
                         result = pc_lane_update({s1, s0}, pc_padded_w, pc_valid_bytes_w, decrypt_reg);
-                        state_reg[319:256] <= result[255:192];
-                        state_reg[255:192] <= result[191:128];
+                        state_reg[319:256] <= result[191:128];
+                        state_reg[255:192] <= result[255:192];
                         cur_final        <= (pc_remaining <= 32'd16);
                         pc_final         <= (pc_remaining <= 32'd16);
                         pc_extra_pending <= (pc_remaining <= 32'd16) && (pc_valid_bytes_w == 5'd16);
@@ -526,8 +526,8 @@ module ascon_controller (
                     begin : pc_extra_absorb
                         reg [255:0] result;
                         result = pc_lane_update({s1, s0}, pc_padded_w, pc_valid_bytes_w, decrypt_reg);
-                        state_reg[319:256] <= result[255:192];
-                        state_reg[255:192] <= result[191:128];
+                        state_reg[319:256] <= result[191:128];
+                        state_reg[255:192] <= result[255:192];
                     end
                     fsm_state <= S_FIN_XOR1;
                 end
@@ -554,8 +554,6 @@ module ascon_controller (
                         reg [63:0] tag_s3, tag_s4;
                         tag_s3 = s3 ^ key_w0;
                         tag_s4 = s4 ^ key_w1;
-                        state_reg[127:64] <= tag_s3;
-                        state_reg[63:0]   <= tag_s4;
                         tag_out <= {tag_s3, tag_s4};
                         auth_ok <= decrypt_reg ? ({tag_s3, tag_s4} == tag_in_reg) : 1'b1;
                     end
