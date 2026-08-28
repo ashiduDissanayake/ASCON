@@ -49,7 +49,7 @@ permutation: $(BUILD)
 	$(VVP) $(BUILD)/ascon_permutation_tb.out
 
 controller: $(BUILD)
-	$(IVERILOG) $(IFLAGS) -o $(BUILD)/ascon_controller_tb.out tb/ascon_controller_tb.v rtl/ascon_controller.v rtl/ascon_keyxor.v rtl/ascon_pad.v $(RTL_COMMON)
+	$(IVERILOG) $(IFLAGS) -o $(BUILD)/ascon_controller_tb.out tb/ascon_controller_tb.v rtl/ascon_controller.v rtl/ascon_pad.v $(RTL_COMMON)
 	$(VVP) $(BUILD)/ascon_controller_tb.out
 
 stub_smoke: $(BUILD)
