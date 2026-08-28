@@ -194,19 +194,7 @@ module ascon_controller (
         .done     (perm_b_done)
     );
 
-    // ------------------------------------------------------------------
-    // Post-initialization key XOR: reuses ascon_keyxor.v as-is, since its
-    // fixed x3/x4 mapping is exactly the pattern Ascon-AEAD128 uses right
-    // after the first 12-round permutation.
-    // ------------------------------------------------------------------
-    wire [63:0] initxor_x0, initxor_x1, initxor_x2, initxor_x3, initxor_x4;
-    ascon_keyxor u_init_keyxor (
-        .x0_in(s0), .x1_in(s1), .x2_in(s2), .x3_in(s3), .x4_in(s4),
-        .key  (key_reg),
-        .x0_out(initxor_x0), .x1_out(initxor_x1), .x2_out(initxor_x2),
-        .x3_out(initxor_x3), .x4_out(initxor_x4)
-    );
-
+    
     // ------------------------------------------------------------------
     // AD absorption helper: rate-word (S0,S1) update for one <=16-byte
     // block, by byte lane, in the ad_data/pc_data stream-order convention
@@ -375,10 +363,9 @@ module ascon_controller (
                     end
                 end
 
-                // Post-init key XOR (S3,S4), via ascon_keyxor.
+                // Post-init key XOR (S3,S4).
                 S_INIT_XOR: begin
-                    state_reg <= {initxor_x0, initxor_x1, initxor_x2,
-                                  initxor_x3, initxor_x4};
+                    state_reg[127:0] <= {s3,s4} ^ key_reg;
                     fsm_state <= S_AD_CHECK;
                 end
 
