@@ -16,8 +16,10 @@ class App(tk.Tk):
         self.ui_font = 'Segoe UI' if 'segoe ui' in families else 'Helvetica'
         self.code_font = 'Consolas' if 'consolas' in families else 'Courier'
         self.title('ASCON | Basys3 UART Console')
-        self.geometry('1120x900')
-        self.minsize(1040, 900)
+        width = min(1120, max(400, self.winfo_screenwidth() - 100))
+        height = min(760, max(350, self.winfo_screenheight() - 150))
+        self.geometry(f'{width}x{height}')
+        self.minsize(min(640, width), min(480, height))
         self.configure(bg='#f3f5f7')
         self.transport = None
         self.source = ''
@@ -60,11 +62,30 @@ class App(tk.Tk):
         style.configure('TLabelframe.Label', font=(self.ui_font, 11, 'bold'), background='#f3f5f7')
         style.configure('TButton', padding=(12, 7))
         style.configure('Accent.TButton', foreground='white', background='#255c82')
-        main = ttk.Frame(self, padding=22)
-        main.pack(fill='both', expand=True)
+        # Scroll the whole form when display scaling makes its requested size
+        # larger than the viewport. Keep scrollbars outside that viewport.
+        shell = ttk.Frame(self)
+        shell.pack(fill='both', expand=True)
+        shell.rowconfigure(0, weight=1)
+        shell.columnconfigure(0, weight=1)
+        self.canvas = tk.Canvas(shell, background='#f3f5f7', highlightthickness=0)
+        self.canvas.grid(row=0, column=0, sticky='nsew')
+        ttk.Scrollbar(shell, orient='vertical', command=self.canvas.yview).grid(row=0, column=1, sticky='ns')
+        ttk.Scrollbar(shell, orient='horizontal', command=self.canvas.xview).grid(row=1, column=0, sticky='ew')
+        self.canvas.configure(yscrollcommand=shell.grid_slaves(row=0, column=1)[0].set,
+                              xscrollcommand=shell.grid_slaves(row=1, column=0)[0].set)
+        main = self.main_frame = ttk.Frame(self.canvas, padding=16)
+        self.content_id = self.canvas.create_window(0, 0, window=main, anchor='nw')
+        main.bind('<Configure>', lambda event: self.canvas.configure(scrollregion=self.canvas.bbox('all')))
+        self.canvas.bind('<Configure>', self._layout_viewport)
+        self.bind_all('<MouseWheel>', self._wheel)
+        self.bind_all('<Button-4>', self._wheel)
+        self.bind_all('<Button-5>', self._wheel)
+        self.bind_all('<FocusIn>', self._reveal_focus)
+        self._narrow = None
         ttk.Label(main, text='ASCON FPGA Console', style='Title.TLabel').pack(anchor='w')
         ttk.Label(main, text='Send inputs to Basys3 and inspect the returned data and authentication tag.').pack(anchor='w', pady=(3, 14))
-        conn = ttk.LabelFrame(main, text='Connection', padding=12)
+        conn = self.connection_frame = ttk.LabelFrame(main, text='Connection', padding=12)
         conn.pack(fill='x')
         self.backend_combo = self._track_widget(ttk.Combobox(conn, textvariable=self.backend, values=['FPGA hardware', 'Software demo'], width=19, state='readonly'), 'readonly')
         self.backend_combo.grid(row=0, column=0, padx=(0, 10))
@@ -74,13 +95,15 @@ class App(tk.Tk):
         self.connect_button = self._track_widget(ttk.Button(conn, text='Connect', command=self._connect))
         self.connect_button.grid(row=0, column=3)
         ttk.Label(conn, text='115200 baud | 8N1').grid(row=0, column=4, padx=16)
-        ttk.Label(conn, textvariable=self.status, wraplength=950).grid(row=1, column=0, columnspan=5, sticky='w', pady=(9, 0))
-        columns = ttk.Frame(main)
+        self.connection_status = ttk.Label(conn, textvariable=self.status, wraplength=950)
+        self.connection_status.grid(row=1, column=0, columnspan=5, sticky='w', pady=(9, 0))
+        self.connection_controls = [w for w in conn.winfo_children() if w is not self.connection_status]
+        columns = self.panel_frame = ttk.Frame(main)
         columns.pack(fill='both', expand=True, pady=16)
         columns.columnconfigure(0, weight=1, uniform='panels')
         columns.columnconfigure(1, weight=1, uniform='panels')
-        left = ttk.LabelFrame(columns, text='Send to FPGA', padding=14)
-        right = ttk.LabelFrame(columns, text='Received result', padding=14)
+        left = self.left_panel = ttk.LabelFrame(columns, text='Send to FPGA', padding=14)
+        right = self.right_panel = ttk.LabelFrame(columns, text='Received result', padding=14)
         left.grid(row=0, column=0, sticky='nsew', padx=(0, 8))
         right.grid(row=0, column=1, sticky='nsew', padx=(8, 0))
         left.columnconfigure(0, weight=1)
@@ -118,8 +141,13 @@ class App(tk.Tk):
         self._track_widget(ttk.Button(actions, text='Load defaults', command=self._defaults)).pack(side='right')
         ttk.Label(left, text='Blank fields use defaults. Tick "Use empty" for zero bytes.\nThe example key is for lab testing.', font=(self.ui_font, 9)).grid(row=17, column=0, sticky='w', pady=(9, 0))
         ttk.Label(right, textvariable=self.output_status, wraplength=420).pack(anchor='w', pady=(0, 12))
-        self.output = tk.Text(right, width=42, height=20, wrap='word', font=(self.code_font, 10), relief='flat', padx=12, pady=12, bg='white', fg='#233043', state='disabled')
-        self.output.pack(fill='both', expand=True)
+        output_frame = ttk.Frame(right)
+        output_frame.pack(fill='both', expand=True)
+        self.output = tk.Text(output_frame, width=32, height=16, wrap='word', font=(self.code_font, 10), relief='flat', padx=12, pady=12, bg='white', fg='#233043', state='disabled')
+        self.output.pack(side='left', fill='both', expand=True)
+        output_scroll = ttk.Scrollbar(output_frame, orient='vertical', command=self.output.yview)
+        output_scroll.pack(side='right', fill='y')
+        self.output.configure(yscrollcommand=output_scroll.set)
         export = ttk.Frame(right)
         export.pack(fill='x', pady=(12, 0))
         self.save_button = ttk.Button(export, text='Export result JSON', command=self._export, state='disabled')
@@ -129,7 +157,57 @@ class App(tk.Tk):
         self.decrypt_result_button = ttk.Button(right, text='Load this result for decryption', command=self._load_decrypt, state='disabled')
         self.decrypt_result_button.pack(anchor='w', pady=(9, 0))
         ttk.Label(right, text='Export contains ciphertext, nonce, AD and tag.\nThe key and plaintext are not exported.', font=(self.ui_font, 9)).pack(anchor='w', pady=(10, 0))
-        ttk.Label(main, text='Same USB cable, both directions  |  One request at a time  |  Decryption requires the included UART v2 module').pack(anchor='w')
+        ttk.Label(main, text='Same USB cable, both directions  |  One request at a time  |  Decryption requires the included UART v2 module', wraplength=900).pack(anchor='w')
+        self.after_idle(lambda: self._layout_viewport())
+
+    def _layout_viewport(self, event=None):
+        if not hasattr(self, 'right_panel'):
+            return
+        width = max(1, self.canvas.winfo_width())
+        # Actual font/widget measurements include the current OS DPI scaling.
+        threshold = self.left_panel.winfo_reqwidth() + self.right_panel.winfo_reqwidth() + 70
+        narrow = width < threshold
+        if narrow != self._narrow:
+            self._narrow = narrow
+            self.panel_frame.columnconfigure(1, weight=0 if narrow else 1, uniform='' if narrow else 'panels')
+            self.panel_frame.columnconfigure(0, weight=1, uniform='' if narrow else 'panels')
+            self.left_panel.grid_configure(row=0, column=0, padx=(0, 0 if narrow else 8))
+            self.right_panel.grid_configure(row=1 if narrow else 0, column=0 if narrow else 1,
+                                            padx=(0 if narrow else 8, 0), pady=(12 if narrow else 0, 0))
+            for index, widget in enumerate(self.connection_controls):
+                widget.grid_configure(row=index // 2 if narrow else 0,
+                                      column=index % 2 if narrow else index, sticky='w', padx=(0, 10), pady=3)
+            self.connection_status.grid_configure(row=3 if narrow else 1, columnspan=2 if narrow else 5)
+        self.connection_status.configure(wraplength=max(240, width - 80))
+        for child in self.main_frame.winfo_children():
+            if isinstance(child, ttk.Label):
+                child.configure(wraplength=max(240, width - 50))
+        self.update_idletasks()
+        content_width = max(width, self.main_frame.winfo_reqwidth())
+        self.canvas.itemconfigure(self.content_id, width=content_width)
+        self.canvas.configure(scrollregion=self.canvas.bbox('all'))
+
+    def _wheel(self, event):
+        if isinstance(event.widget, (ttk.Combobox, tk.Text)):
+            return
+        direction = -1 if getattr(event, 'num', 0) == 4 or getattr(event, 'delta', 0) > 0 else 1
+        if self.canvas.yview() != (0.0, 1.0):
+            self.canvas.yview_scroll(direction * 3, 'units')
+            return 'break'
+
+    def _reveal_focus(self, event):
+        widget = event.widget
+        if widget is self or not str(widget).startswith(str(self.main_frame)):
+            return
+        self.update_idletasks()
+        top = widget.winfo_rooty() - self.main_frame.winfo_rooty()
+        view_top = self.canvas.canvasy(0)
+        view_height = self.canvas.winfo_height()
+        height = max(1, self.main_frame.winfo_height())
+        if top < view_top:
+            self.canvas.yview_moveto(max(0, top - 12) / height)
+        elif top + widget.winfo_height() > view_top + view_height:
+            self.canvas.yview_moveto(max(0, top + widget.winfo_height() - view_height + 12) / height)
 
     def refresh_ports(self):
         ports = list_ports()
@@ -244,7 +322,7 @@ class App(tk.Tk):
             self.result = None
             self.status.set(error)
             self.output_status.set('Operation failed - no successful result')
-            self._show(error + '\n\nFor hardware communication errors: press btnC, reconnect, then retry.\nAuthentication failure means the key, nonce, AD, ciphertext or tag did not match.')
+            self._show(error)
         elif kind == 'connect':
             self.transport = value
             self.status.set(f'Connected: {self.source}')

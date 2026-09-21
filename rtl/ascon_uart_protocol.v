@@ -19,12 +19,15 @@
 // 
 
 
-
-// Fixed request: A5 01 AD_LEN PT_LEN KEY[16] NONCE[16] AD[16] PT[16].
-// Fixed response: 5A STATUS CT[16] TAG[16]. STATUS=00 success, 01 bad
-// command, 02 invalid length. Unused CT bytes and error payloads are zero.
+// Encrypt (68 bytes): A5 01 AD_LEN LEN KEY[16] NONCE[16] AD[16] PT[16].
+// Decrypt (84 bytes): A5 02 AD_LEN LEN KEY[16] NONCE[16] AD[16] CT[16] TAG[16].
+// Fixed response: 5A STATUS DATA[16] TAG[16]. STATUS=00 success, 01 bad
+// command, 02 invalid length, 03 authentication failure.
+// DATA is ciphertext for encrypt, verified plaintext for decrypt.
+// No plaintext is released over UART until authentication succeeds.
+// Unused DATA bytes and error payloads are zero.
 // All external fields use natural byte order; only the core bus is repacked.
-// One outstanding transaction. Always send all 68 bytes, then read 34 bytes.
+// One outstanding transaction. Send the complete request, then read 34 bytes.
 // A truncated frame requires btnC reset (no packet timeout in this version).
 module ascon_uart_protocol (
     input  wire         clk,
@@ -102,7 +105,7 @@ module ascon_uart_protocol (
             case (state)
                 IDLE: if (rx_valid && rx_data == 8'hA5) begin
                     req_index <= 1;
-                    ct_buf <= 0; tag_buf <= 0; status <= 0;
+                    ct_buf <= 0; tag_buf <= 0; status <= 0; ascon_tag_in <= 0;
                     state <= RECEIVE;
                 end
                 RECEIVE: if (rx_valid) begin
@@ -115,19 +118,21 @@ module ascon_uart_protocol (
                         ascon_nonce[word_lane(req_index-20) +: 8] <= rx_data;
                     else if (req_index < 52)
                         ad_buf[(req_index-36)*8 +: 8] <= rx_data;
-                    else pt_buf[(req_index-52)*8 +: 8] <= rx_data;
-                    if (req_index == 67) state <= START;
+                    else if (req_index < 68) pt_buf[(req_index-52)*8 +: 8] <= rx_data;
+                    else ascon_tag_in[word_lane(req_index-68) +: 8] <= rx_data;
+                    if ((req_index == 67 && command != 8'h02) || req_index == 83) state <= START;
                     else req_index <= req_index + 1'b1;
                 end
                 START: begin
                     resp_index <= 0;
-                    if (command != 8'h01) begin
+                    if (command != 8'h01 && command != 8'h02) begin
                         status <= 8'h01;
                         state <= RESPOND;
                     end else if (ad_length > 16 || pt_length > 16) begin
                         status <= 8'h02;
                         state <= RESPOND;
                     end else if (!ascon_busy) begin
+                        ascon_decrypt <= (command == 8'h02);
                         ascon_ad_len <= {24'b0, ad_length};
                         ascon_pc_len <= {24'b0, pt_length};
                         ascon_ad_data <= ad_buf;
@@ -150,7 +155,11 @@ module ascon_uart_protocol (
                             else ct_buf[lane*8 +: 8] <= 0;
                     end
                     if (ascon_done) begin
-                        tag_buf <= ascon_tag_out;
+                        if (command == 8'h02 && !ascon_auth_ok) begin
+                            status <= 8'h03;
+                            ct_buf <= 0;
+                            tag_buf <= 0;
+                        end else tag_buf <= ascon_tag_out;
                         ascon_pc_ready_in <= 0;
                         ascon_ad_valid <= 0;
                         ascon_pc_valid <= 0;
@@ -177,4 +186,3 @@ module ascon_uart_protocol (
         end
     end
 endmodule
-

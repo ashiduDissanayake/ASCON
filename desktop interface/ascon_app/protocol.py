@@ -78,7 +78,7 @@ def decode_response(raw, plaintext_length):
     if raw[0] != 0x5A:
         raise ProtocolError('Wrong response marker. Check FPGA firmware and baud rate.')
     if raw[1] != 0:
-        meanings = {1: 'FPGA rejected the command', 2: 'FPGA rejected an input length', 3: 'Authentication failed. No plaintext was released.'}
+        meanings = {1: 'FPGA rejected the command (status 01). For decryption, install the UART v2 ascon_uart_protocol.v, rebuild the bitstream and program the FPGA. Then press btnC and reconnect. Resetting alone does not update the bitstream.', 2: 'FPGA rejected an input length', 3: 'Authentication failed. No plaintext was released.'}
         raise ProtocolError(meanings.get(raw[1], f'Unknown FPGA status 0x{raw[1]:02x}'))
     if any(raw[2+plaintext_length:18]):
         raise ProtocolError('Nonzero ciphertext padding: response does not match the fixed-frame protocol.')
