@@ -2,14 +2,14 @@
 from datetime import datetime, timezone
 import json
 import time
-from .protocol import encode_request, decode_response
+
 
 
 def run_operation(transport, request, source):
     start = time.perf_counter()
-    response = decode_response(transport.exchange(encode_request(request)), len(request.plaintext))
+    response = transport.run(request)
     return {
-        'format': 'basys3-ascon-result-v1',
+        'format': 'basys3-ascon-result-v3',
         'algorithm': 'Ascon-AEAD128',
         'source': source,
         'operation': 'decrypt' if request.decrypt else 'encrypt',

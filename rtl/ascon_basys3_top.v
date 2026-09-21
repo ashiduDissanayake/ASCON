@@ -18,6 +18,7 @@
 // Additional Comments:
 // 
 
+
 // Basys3 top-level wrapper for the existing Ascon-AEAD128 controller.
 // USB -> FT2232HQ -> UART -> this module -> ASCON -> UART -> USB.
 module ascon_basys3_top #(

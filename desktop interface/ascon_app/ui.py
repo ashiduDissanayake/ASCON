@@ -15,7 +15,7 @@ class App(tk.Tk):
         families = {name.lower() for name in font.families(self)}
         self.ui_font = 'Segoe UI' if 'segoe ui' in families else 'Helvetica'
         self.code_font = 'Consolas' if 'consolas' in families else 'Courier'
-        self.title('ASCON | Basys3 UART Console')
+        self.title('ASCON | Streaming UART v3')
         width = min(1120, max(400, self.winfo_screenwidth() - 100))
         height = min(760, max(350, self.winfo_screenheight() - 150))
         self.geometry(f'{width}x{height}')
@@ -41,6 +41,9 @@ class App(tk.Tk):
         self.empty_data = tk.BooleanVar(value=False)
         self.status = tk.StringVar(value='Disconnected - program the FPGA and press btnC before connecting.')
         self.output_status = tk.StringVar(value='No response yet')
+        self.round_trip = tk.StringVar(value='Round trip: —')
+        self.auth_status = tk.StringVar(value='No result yet')
+        self._wheel_remainder = 0.0
         self._build()
         self._defaults()
         self.refresh_ports()
@@ -61,31 +64,29 @@ class App(tk.Tk):
         style.configure('TLabelframe', background='#f3f5f7')
         style.configure('TLabelframe.Label', font=(self.ui_font, 11, 'bold'), background='#f3f5f7')
         style.configure('TButton', padding=(12, 7))
+        for name, fg, bg in [('Neutral', '#475569', '#e2e8f0'), ('Success', '#166534', '#dcfce7'), ('Failure', '#991b1b', '#fee2e2'), ('Pending', '#92400e', '#fef3c7')]:
+            style.configure(name + '.TLabel', foreground=fg, background=bg, padding=(8, 5), font=(self.ui_font, 10, 'bold'))
         style.configure('Accent.TButton', foreground='white', background='#255c82')
-        # Scroll the whole form when display scaling makes its requested size
-        # larger than the viewport. Keep scrollbars outside that viewport.
+        # The form normally fits without chrome. Reveal an outer scrollbar only
+        # when a smaller window makes the responsive layout taller than its view.
         shell = ttk.Frame(self)
         shell.pack(fill='both', expand=True)
         shell.rowconfigure(0, weight=1)
         shell.columnconfigure(0, weight=1)
         self.canvas = tk.Canvas(shell, background='#f3f5f7', highlightthickness=0)
         self.canvas.grid(row=0, column=0, sticky='nsew')
-        ttk.Scrollbar(shell, orient='vertical', command=self.canvas.yview).grid(row=0, column=1, sticky='ns')
-        ttk.Scrollbar(shell, orient='horizontal', command=self.canvas.xview).grid(row=1, column=0, sticky='ew')
-        self.canvas.configure(yscrollcommand=shell.grid_slaves(row=0, column=1)[0].set,
-                              xscrollcommand=shell.grid_slaves(row=1, column=0)[0].set)
+        self.page_scroll = ttk.Scrollbar(shell, orient='vertical', command=self.canvas.yview)
+        self.canvas.configure(yscrollcommand=self.page_scroll.set)
         main = self.main_frame = ttk.Frame(self.canvas, padding=16)
         self.content_id = self.canvas.create_window(0, 0, window=main, anchor='nw')
-        main.bind('<Configure>', lambda event: self.canvas.configure(scrollregion=self.canvas.bbox('all')))
+        main.bind('<Configure>', self._content_resized)
         self.canvas.bind('<Configure>', self._layout_viewport)
-        self.bind_all('<MouseWheel>', self._wheel)
-        self.bind_all('<Button-4>', self._wheel)
-        self.bind_all('<Button-5>', self._wheel)
-        self.bind_all('<FocusIn>', self._reveal_focus)
+        self.bind_class('AsconWheel', '<MouseWheel>', self._wheel)
+        self.bind_class('AsconWheel', '<Button-4>', self._wheel)
+        self.bind_class('AsconWheel', '<Button-5>', self._wheel)
         self._narrow = None
         ttk.Label(main, text='ASCON FPGA Console', style='Title.TLabel').pack(anchor='w')
-        ttk.Label(main, text='Send inputs to Basys3 and inspect the returned data and authentication tag.').pack(anchor='w', pady=(3, 14))
-        conn = self.connection_frame = ttk.LabelFrame(main, text='Connection', padding=12)
+        conn = self.connection_frame = ttk.LabelFrame(main, text='Connection', padding=8)
         conn.pack(fill='x')
         self.backend_combo = self._track_widget(ttk.Combobox(conn, textvariable=self.backend, values=['FPGA hardware', 'Software demo'], width=19, state='readonly'), 'readonly')
         self.backend_combo.grid(row=0, column=0, padx=(0, 10))
@@ -94,7 +95,7 @@ class App(tk.Tk):
         self._track_widget(ttk.Button(conn, text='Refresh ports', command=self.refresh_ports)).grid(row=0, column=2, padx=(0, 10))
         self.connect_button = self._track_widget(ttk.Button(conn, text='Connect', command=self._connect))
         self.connect_button.grid(row=0, column=3)
-        ttk.Label(conn, text='115200 baud | 8N1').grid(row=0, column=4, padx=16)
+        ttk.Label(conn, text='115200 | UART v3').grid(row=0, column=4, padx=16)
         self.connection_status = ttk.Label(conn, textvariable=self.status, wraplength=950)
         self.connection_status.grid(row=1, column=0, columnspan=5, sticky='w', pady=(9, 0))
         self.connection_controls = [w for w in conn.winfo_children() if w is not self.connection_status]
@@ -124,7 +125,7 @@ class App(tk.Tk):
         self.encoding_combo = self._track_widget(ttk.Combobox(options, textvariable=self.encoding, values=['UTF-8 text', 'Hex bytes'], width=13, state='readonly'), 'readonly')
         self.encoding_combo.pack(side='right')
         self.encoding_combo.bind('<<ComboboxSelected>>', self._encoding_changed)
-        ttk.Label(left, text='Associated data | up to 16 bytes').grid(row=8, column=0, sticky='w', pady=(8, 3))
+        ttk.Label(left, text='Associated data | streamed in 16-byte blocks').grid(row=8, column=0, sticky='w', pady=(8, 3))
         self._track_widget(ttk.Entry(left, textvariable=self.ad)).grid(row=9, column=0, sticky='ew')
         self._track_widget(ttk.Checkbutton(left, text='Use empty AD', variable=self.empty_ad)).grid(row=10, column=0, sticky='w')
         self.data_label = ttk.Label(left)
@@ -134,13 +135,24 @@ class App(tk.Tk):
         ttk.Label(left, text='Authentication tag | decryption only, hex').grid(row=14, column=0, sticky='w', pady=(7, 3))
         self.tag_entry = self._track_widget(ttk.Entry(left, textvariable=self.tag, font=(self.code_font, 10)))
         self.tag_entry.grid(row=15, column=0, sticky='ew')
+        file_actions = ttk.Frame(left)
+        file_actions.grid(row=16, column=0, sticky='ew', pady=(10, 0))
+        self._track_widget(ttk.Button(file_actions, text='Load AD file', command=lambda: self._load_file(True))).pack(side='left')
+        self._track_widget(ttk.Button(file_actions, text='Load data file', command=lambda: self._load_file(False))).pack(side='right')
         actions = ttk.Frame(left)
-        actions.grid(row=16, column=0, sticky='ew', pady=(12, 0))
+        actions.grid(row=17, column=0, sticky='ew', pady=(12, 0))
         self.send_button = ttk.Button(actions, text='Send & encrypt', style='Accent.TButton', command=self._send, state='disabled')
         self.send_button.pack(side='left')
         self._track_widget(ttk.Button(actions, text='Load defaults', command=self._defaults)).pack(side='right')
-        ttk.Label(left, text='Blank fields use defaults. Tick "Use empty" for zero bytes.\nThe example key is for lab testing.', font=(self.ui_font, 9)).grid(row=17, column=0, sticky='w', pady=(9, 0))
-        ttk.Label(right, textvariable=self.output_status, wraplength=420).pack(anchor='w', pady=(0, 12))
+        ttk.Label(left, text='Blank fields use defaults. Tick "Use empty" for zero bytes.\nThe example key is for lab testing.', font=(self.ui_font, 9)).grid(row=18, column=0, sticky='w', pady=(9, 0))
+        result_header = ttk.Frame(right)
+        result_header.pack(fill='x', pady=(0, 10))
+        self.auth_badge = ttk.Label(result_header, textvariable=self.auth_status, style='Neutral.TLabel')
+        self.auth_badge.pack(side='left')
+        self.time_label = ttk.Label(result_header, textvariable=self.round_trip, font=(self.ui_font, 10, 'bold'))
+        self.time_label.pack(side='right', padx=(10, 0))
+        self.source_label = ttk.Label(right, textvariable=self.output_status, wraplength=420)
+        self.source_label.pack(anchor='w', pady=(0, 10))
         output_frame = ttk.Frame(right)
         output_frame.pack(fill='both', expand=True)
         self.output = tk.Text(output_frame, width=32, height=16, wrap='word', font=(self.code_font, 10), relief='flat', padx=12, pady=12, bg='white', fg='#233043', state='disabled')
@@ -148,6 +160,7 @@ class App(tk.Tk):
         output_scroll = ttk.Scrollbar(output_frame, orient='vertical', command=self.output.yview)
         output_scroll.pack(side='right', fill='y')
         self.output.configure(yscrollcommand=output_scroll.set)
+        self.output_scroll = output_scroll
         export = ttk.Frame(right)
         export.pack(fill='x', pady=(12, 0))
         self.save_button = ttk.Button(export, text='Export result JSON', command=self._export, state='disabled')
@@ -157,7 +170,7 @@ class App(tk.Tk):
         self.decrypt_result_button = ttk.Button(right, text='Load this result for decryption', command=self._load_decrypt, state='disabled')
         self.decrypt_result_button.pack(anchor='w', pady=(9, 0))
         ttk.Label(right, text='Export contains ciphertext, nonce, AD and tag.\nThe key and plaintext are not exported.', font=(self.ui_font, 9)).pack(anchor='w', pady=(10, 0))
-        ttk.Label(main, text='Same USB cable, both directions  |  One request at a time  |  Decryption requires the included UART v2 module', wraplength=900).pack(anchor='w')
+        self._install_scroll_bindings(self.main_frame)
         self.after_idle(lambda: self._layout_viewport())
 
     def _layout_viewport(self, event=None):
@@ -183,31 +196,77 @@ class App(tk.Tk):
             if isinstance(child, ttk.Label):
                 child.configure(wraplength=max(240, width - 50))
         self.update_idletasks()
-        content_width = max(width, self.main_frame.winfo_reqwidth())
-        self.canvas.itemconfigure(self.content_id, width=content_width)
+        self.canvas.itemconfigure(self.content_id, width=width)
+        self.source_label.configure(wraplength=max(240, self.right_panel.winfo_width()-40))
         self.canvas.configure(scrollregion=self.canvas.bbox('all'))
+        self._update_page_scrollbar()
+
+    def _content_resized(self, event=None):
+        self.canvas.configure(scrollregion=self.canvas.bbox('all'))
+        self.after_idle(self._update_page_scrollbar)
+
+    def _update_page_scrollbar(self):
+        if not self.winfo_exists():
+            return
+        content_height = self.main_frame.winfo_reqheight()
+        viewport_height = self.canvas.winfo_height()
+        needs_scroll = content_height > viewport_height + 1
+        if needs_scroll and not self.page_scroll.winfo_ismapped():
+            self.page_scroll.grid(row=0, column=1, sticky='ns')
+        elif not needs_scroll and self.page_scroll.winfo_ismapped():
+            self.canvas.yview_moveto(0)
+            self.page_scroll.grid_remove()
+
+    def _install_scroll_bindings(self, widget):
+        # Run before widget/class defaults: one wheel event scrolls exactly once.
+        widget.bindtags(('AsconWheel',) + widget.bindtags())
+        for child in widget.winfo_children():
+            self._install_scroll_bindings(child)
 
     def _wheel(self, event):
-        if isinstance(event.widget, (ttk.Combobox, tk.Text)):
+        if event.widget.winfo_toplevel() is not self:
             return
-        direction = -1 if getattr(event, 'num', 0) == 4 or getattr(event, 'delta', 0) > 0 else 1
-        if self.canvas.yview() != (0.0, 1.0):
-            self.canvas.yview_scroll(direction * 3, 'units')
-            return 'break'
+        num, delta = getattr(event, 'num', 0), getattr(event, 'delta', 0)
+        if num in (4, 5):
+            units = -3 if num == 4 else 3
+        else:
+            scale = 1 if self.tk.call('tk', 'windowingsystem') == 'aqua' else 120
+            self._wheel_remainder += -delta / scale * 3
+            units = int(self._wheel_remainder)
+            self._wheel_remainder -= units
+            if not units:
+                return 'break'
+        # Prefer the result pane's own scroll; otherwise scroll the page only
+        # when the reduced window has caused the outer scrollbar to appear.
+        if event.widget in (self.output, self.output_scroll):
+            first, last = self.output.yview()
+            if (units < 0 and first > 0.00001) or (units > 0 and last < 0.99999):
+                self.output.yview_scroll(units, 'units')
+        elif self.page_scroll.winfo_ismapped():
+            first, last = self.canvas.yview()
+            if (units < 0 and first > 0.00001) or (units > 0 and last < 0.99999):
+                self.canvas.yview_scroll(units, 'units')
+        return 'break'
 
-    def _reveal_focus(self, event):
-        widget = event.widget
-        if widget is self or not str(widget).startswith(str(self.main_frame)):
+    def _set_result_status(self, text, tone='Neutral'):
+        self.auth_status.set(text)
+        self.auth_badge.configure(style=tone + '.TLabel')
+
+    def _load_file(self, associated):
+        path = filedialog.askopenfilename(title='Load associated data' if associated else 'Load plaintext / ciphertext bytes')
+        if not path:
             return
-        self.update_idletasks()
-        top = widget.winfo_rooty() - self.main_frame.winfo_rooty()
-        view_top = self.canvas.canvasy(0)
-        view_height = self.canvas.winfo_height()
-        height = max(1, self.main_frame.winfo_height())
-        if top < view_top:
-            self.canvas.yview_moveto(max(0, top - 12) / height)
-        elif top + widget.winfo_height() > view_top + view_height:
-            self.canvas.yview_moveto(max(0, top + widget.winfo_height() - view_height + 12) / height)
+        try:
+            with open(path, 'rb') as source:
+                data = source.read()
+            if self.encoding.get() != 'Hex bytes':
+                self.encoding.set('Hex bytes')
+                self._encoding_changed()
+            (self.ad if associated else self.data).set(data.hex())
+            (self.empty_ad if associated else self.empty_data).set(not data)
+            self.status.set(f'Loaded {len(data)} bytes. Files are represented as hex in the input field.')
+        except (OSError, ValueError) as exc:
+            messagebox.showerror('File input', str(exc))
 
     def refresh_ports(self):
         ports = list_ports()
@@ -226,7 +285,7 @@ class App(tk.Tk):
         self.auto_nonce.set(not decrypt)
         self.empty_ad.set(False)
         self.empty_data.set(False)
-        self.data_label.configure(text='Ciphertext | up to 16 bytes, always hex' if decrypt else 'Plaintext | up to 16 UTF-8 bytes')
+        self.data_label.configure(text='Ciphertext | hex, streamed in 16-byte blocks' if decrypt else 'Plaintext | streamed in 16-byte blocks')
         self.send_button.configure(text='Send & decrypt' if decrypt else 'Send & encrypt')
         self._states()
 
@@ -297,9 +356,11 @@ class App(tk.Tk):
             self.tag.set(request.tag.hex())
         self.last_request = request
         self.result = None
+        self.round_trip.set('Round trip: —')
+        self._set_result_status('Verifying…' if decrypt else 'Encrypting…', 'Pending')
         self._show('Waiting for response...')
         self.output_status.set(f'{self.source} | processing')
-        self.status.set('Sending request and waiting for 34 response bytes...')
+        self.status.set('Streaming input/output blocks; waiting for final authentication tag...')
         transport, source = self.transport, self.source
         def transact():
             try:
@@ -321,7 +382,9 @@ class App(tk.Tk):
                 self.transport = None
             self.result = None
             self.status.set(error)
-            self.output_status.set('Operation failed - no successful result')
+            self.round_trip.set('Round trip: —')
+            self._set_result_status('Authentication failed' if 'Authentication failed' in error else 'Operation failed', 'Failure')
+            self.output_status.set('No successful result')
             self._show(error)
         elif kind == 'connect':
             self.transport = value
@@ -332,7 +395,9 @@ class App(tk.Tk):
         else:
             self.result = value
             decrypt = value['operation'] == 'decrypt'
-            self.output_status.set(f"{value['source']} | {'authentication verified' if decrypt else 'encryption complete'}")
+            self.output_status.set(value['source'])
+            self._set_result_status('Authentication verified' if decrypt else 'Encryption complete', 'Success')
+            self.round_trip.set(f"Round trip: {value['round_trip_ms']:,.3f} ms")
             data = value['plaintext_hex'] if decrypt else value['ciphertext_hex']
             text = f"{'PLAINTEXT' if decrypt else 'CIPHERTEXT'} (hex)\n{data or '(empty)'}\n\n"
             if decrypt:
@@ -340,7 +405,7 @@ class App(tk.Tk):
                     text += 'PLAINTEXT (UTF-8)\n' + bytes.fromhex(data).decode('utf-8') + '\n\n'
                 except UnicodeDecodeError:
                     text += 'Plaintext is binary; view the hex above.\n\n'
-            text += f"TAG (hex)\n{value['tag_hex']}\n\nNONCE USED\n{value['nonce_hex']}\n\nAD (hex)\n{value['associated_data_hex']}\n\nINPUT: {value['plaintext_bytes']} bytes\nROUND TRIP: {value['round_trip_ms']:.3f} ms\n(includes USB/UART and host overhead)"
+            text += f"TAG (hex)\n{value['tag_hex']}\n\nNONCE USED\n{value['nonce_hex']}\n\nAD (hex)\n{value['associated_data_hex']}\n\nINPUT: {value['plaintext_bytes']} bytes"
             self._show(text)
             self.status.set('Complete - ready for another request.')
         self._states()
@@ -351,6 +416,7 @@ class App(tk.Tk):
         self.output.delete('1.0', 'end')
         self.output.insert('1.0', text)
         self.output.configure(state='disabled')
+        self.output.yview_moveto(0)
 
     def _load_decrypt(self):
         result, request = self.result, self.last_request
@@ -381,7 +447,7 @@ class App(tk.Tk):
 
     def _close(self):
         if self.pending:
-            self.status.set('Wait for the current operation to finish before closing (serial timeout is 3 seconds).')
+            self.status.set('Wait for the current operation to finish before closing (timeout is 3 seconds of serial inactivity).')
             return
         if self.transport:
             self.transport.close()

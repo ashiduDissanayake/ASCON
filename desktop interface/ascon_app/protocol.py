@@ -26,8 +26,8 @@ class Request:
             raise ValueError('Key and nonce must each contain exactly 16 bytes (32 hex digits).')
         if self.decrypt and len(self.tag) != 16:
             raise ValueError('Decryption requires a 16-byte authentication tag (32 hex digits).')
-        if len(self.ad) > 16 or len(self.plaintext) > 16:
-            raise ValueError('This FPGA interface supports at most 16 bytes of AD and 16 bytes of plaintext.')
+        if len(self.ad) > 0xFFFFFFFF or len(self.plaintext) > 0xFFFFFFFF:
+            raise ValueError('UART v3 uses unsigned 32-bit BYTE lengths (maximum 2^32-1 each).')
 
 @dataclass(frozen=True)
 class Response:
@@ -65,21 +65,21 @@ def make_request(key, nonce, ad, plaintext, mode='UTF-8 text', empty_ad=False, e
 
 
 def encode_request(request):
-    return (bytes([0xA5, 2 if request.decrypt else 1, len(request.ad), len(request.plaintext)]) +
-            request.key + request.nonce + request.ad.ljust(16, b'\0') +
-            request.plaintext.ljust(16, b'\0') + (request.tag if request.decrypt else b''))
+    """Encode only the fixed 58-byte header. Payload follows on FPGA grants."""
+    return (bytes([0xA5, 0x12 if request.decrypt else 0x11]) +
+            len(request.ad).to_bytes(4, 'little') +
+            len(request.plaintext).to_bytes(4, 'little') + request.key +
+            request.nonce + (request.tag if request.decrypt else bytes(16)))
 
 
-def decode_response(raw, plaintext_length):
-    if not 0 <= plaintext_length <= 16:
-        raise ProtocolError('Invalid expected plaintext length.')
-    if len(raw) != 34:
-        raise ProtocolError(f'Expected 34 response bytes; received {len(raw)}.')
-    if raw[0] != 0x5A:
-        raise ProtocolError('Wrong response marker. Check FPGA firmware and baud rate.')
-    if raw[1] != 0:
-        meanings = {1: 'FPGA rejected the command (status 01). For decryption, install the UART v2 ascon_uart_protocol.v, rebuild the bitstream and program the FPGA. Then press btnC and reconnect. Resetting alone does not update the bitstream.', 2: 'FPGA rejected an input length', 3: 'Authentication failed. No plaintext was released.'}
-        raise ProtocolError(meanings.get(raw[1], f'Unknown FPGA status 0x{raw[1]:02x}'))
-    if any(raw[2+plaintext_length:18]):
-        raise ProtocolError('Nonzero ciphertext padding: response does not match the fixed-frame protocol.')
-    return Response(raw[2:2+plaintext_length], raw[18:34], raw)
+def decode_record(raw):
+    if len(raw) != 19 or raw[0] != 0x5A:
+        raise ProtocolError('Invalid UART v3 record. Install the matching streaming bitstream, press btnC and reconnect.')
+    kind, count, payload = raw[1], raw[2], raw[3:]
+    if kind == 0x7F:
+        errors = {
+            1: 'FPGA rejected the command. Program the UART v3 streaming bitstream.',
+            3: 'Authentication failed. Provisional plaintext discarded; no result accepted.',
+        }
+        raise ProtocolError(errors.get(count, f'FPGA error {count:02x}'))
+    return kind, count, payload
