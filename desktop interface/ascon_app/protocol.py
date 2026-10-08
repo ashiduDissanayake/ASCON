@@ -26,8 +26,8 @@ class Request:
             raise ValueError('Key and nonce must each contain exactly 16 bytes (32 hex digits).')
         if self.decrypt and len(self.tag) != 16:
             raise ValueError('Decryption requires a 16-byte authentication tag (32 hex digits).')
-        if len(self.ad) > 0xFFFFFFFF or len(self.plaintext) > 0xFFFFFFFF:
-            raise ValueError('UART v3 uses unsigned 32-bit BYTE lengths (maximum 2^32-1 each).')
+        if len(self.ad) > 8192 or len(self.plaintext) > 8192:
+            raise ValueError('Bounded UART v3 supports at most 8192 bytes each for AD and payload.')
 
 @dataclass(frozen=True)
 class Response:
@@ -79,7 +79,9 @@ def decode_record(raw):
     if kind == 0x7F:
         errors = {
             1: 'FPGA rejected the command. Program the UART v3 streaming bitstream.',
+            2: 'FPGA rejected an excessive length. Maximum AD and payload: 8192 bytes each.',
             3: 'Authentication failed. Provisional plaintext discarded; no result accepted.',
+            4: 'FPGA receive timeout. Transaction aborted. Reset before reconnecting.',
         }
         raise ProtocolError(errors.get(count, f'FPGA error {count:02x}'))
     return kind, count, payload

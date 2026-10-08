@@ -18,9 +18,9 @@ BUILD := build
 
 RTL_COMMON := rtl/ascon_pC.v rtl/ascon_pS.v rtl/ascon_pL.v rtl/ascon_round_const.v rtl/ascon_round.v rtl/ascon_permutation.v
 
-.PHONY: all clean vectors pC pS pL round permutation controller stub_smoke
+.PHONY: all clean vectors pC pS pL round permutation controller handshake uart_recovery stub_smoke
 
-all: pC pS pL round permutation controller stub_smoke
+all: pC pS pL round permutation controller handshake uart_recovery stub_smoke
 
 vectors:
 	python3 model/gen_vectors.py
@@ -51,6 +51,14 @@ permutation: $(BUILD)
 controller: $(BUILD)
 	$(IVERILOG) $(IFLAGS) -o $(BUILD)/ascon_controller_tb.out tb/ascon_controller_tb.v rtl/ascon_controller.v rtl/ascon_pad.v $(RTL_COMMON)
 	$(VVP) $(BUILD)/ascon_controller_tb.out
+
+handshake: $(BUILD)
+	$(IVERILOG) $(IFLAGS) -o $(BUILD)/ascon_controller_handshake_tb.out tb/ascon_controller_handshake_tb.v rtl/ascon_controller.v rtl/ascon_pad.v $(RTL_COMMON)
+	$(VVP) $(BUILD)/ascon_controller_handshake_tb.out
+
+uart_recovery: $(BUILD)
+	$(IVERILOG) $(IFLAGS) -o $(BUILD)/ascon_uart_recovery_tb.out tb/ascon_uart_recovery_tb.v rtl/ascon_uart_protocol.v
+	$(VVP) $(BUILD)/ascon_uart_recovery_tb.out
 
 stub_smoke: $(BUILD)
 	$(IVERILOG) $(IFLAGS) -o $(BUILD)/tb_stub_smoke.out tb/tb_stub_smoke.v tb/stub_always_fail.v

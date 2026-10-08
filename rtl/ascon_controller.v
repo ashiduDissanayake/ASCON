@@ -1,3 +1,4 @@
+`timescale 1ns/1ps
 // ascon_controller: top-level FSM orchestrating Ascon-AEAD128 encryption and
 // decryption on top of the already-verified submodules in rtl/.
 //
@@ -87,12 +88,12 @@ module ascon_controller (
     output reg  [127:0] tag_out,      // computed tag, valid at `done`
 
     // Associated-data input stream (skip entirely when ad_len == 0) ----------
-    output reg           ad_ready,
+    output wire          ad_ready,
     input  wire          ad_valid,
     input  wire [127:0]  ad_data,
 
     // Plaintext/ciphertext input stream ---------------------------------------
-    output reg           pc_ready,
+    output wire          pc_ready,
     input  wire          pc_valid,
     input  wire [127:0]  pc_data_in,
 
@@ -291,6 +292,10 @@ module ascon_controller (
 
     reg [4:0] fsm_state;
 
+    // Ready must describe the transfer possible on this edge.
+    assign ad_ready = rst_n && (fsm_state == S_AD_WAIT);
+    assign pc_ready = rst_n && (fsm_state == S_PC_WAIT) && (pc_remaining != 0);
+
     // Per-block scratch: whether the block just absorbed was the last real
     // block on the current stream. Consumed by the state right after the
     // following permute to decide where to go next.
@@ -304,8 +309,6 @@ module ascon_controller (
             done             <= 1'b0;
             auth_ok          <= 1'b0;
             tag_out          <= 128'd0;
-            ad_ready         <= 1'b0;
-            pc_ready         <= 1'b0;
             pc_valid_out     <= 1'b0;
             pc_data_out      <= 128'd0;
             pc_bytes_out     <= 5'd0;
@@ -328,8 +331,6 @@ module ascon_controller (
             done         <= 1'b0;
             perm_a_start <= 1'b0;
             perm_b_start <= 1'b0;
-            ad_ready     <= 1'b0;
-            pc_ready     <= 1'b0;
 
             case (fsm_state)
 
@@ -378,8 +379,7 @@ module ascon_controller (
                 end
 
                 S_AD_WAIT: begin
-                    ad_ready <= 1'b1;
-                    if (ad_valid) begin
+                    if (ad_valid && ad_ready) begin
                         begin : ad_absorb
                             reg [127:0] updated;
                             updated = ad_lane_update({s1, s0}, ad_padded_w, ad_valid_bytes_w);
@@ -447,8 +447,7 @@ module ascon_controller (
                         pc_data_reg <= 128'd0;
                         fsm_state   <= S_PC_ABSORB;
                     end else begin
-                        pc_ready <= 1'b1;
-                        if (pc_valid) begin
+                        if (pc_valid && pc_ready) begin
                             pc_data_reg <= pc_data_in;
                             fsm_state   <= S_PC_ABSORB;
                         end

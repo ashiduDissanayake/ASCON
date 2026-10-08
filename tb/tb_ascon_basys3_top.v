@@ -76,7 +76,7 @@ module tb_ascon_basys3_top;
             get_record;
             if(record_bytes[1]!==1 || record_bytes[2]!==3 || record_bytes[3]!==8'h41 || record_bytes[4]!==8'h53 || record_bytes[5]!==8'h43 || record_bytes[6]!==8'h33)
                 $fatal(1,"Bad v3 hello");
-            if({record_bytes[10],record_bytes[9],record_bytes[8],record_bytes[7]}!==32'hFFFFFFFF || record_bytes[11]!==1)$fatal(1,"Wrong capabilities");
+            if({record_bytes[10],record_bytes[9],record_bytes[8],record_bytes[7]}!==32'd8192 || record_bytes[11]!==1)$fatal(1,"Wrong capabilities");
             while(!finished) begin
                 get_record;count=record_bytes[2];
                 case(record_bytes[1])

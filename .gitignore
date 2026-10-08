@@ -36,3 +36,8 @@ htmlcov/
 
 vivado_work/
 *.jou
+/.Xil/
+/xsim.dir/
+/*.pb
+/*.wdb
+/*.str

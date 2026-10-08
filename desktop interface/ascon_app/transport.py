@@ -49,7 +49,8 @@ def exchange_stream(stream, request, timeout=TIMEOUT):
     kind, count, payload = decode_record(read_exact(stream, 19, timeout))
     if kind != 1 or count != 3 or payload[:4] != b'ASC3':
         raise ProtocolError('Wrong firmware/protocol: expected UART v3 ASC3 hello.')
-    if payload[4:8] != b'\xff'*4 or payload[8:] != b'\x01'+b'\0'*7:
+    maximum = int.from_bytes(payload[4:8], 'little')
+    if maximum < max(len(request.ad), len(request.plaintext)) or payload[8:] != b'\x01'+b'\0'*7:
         raise ProtocolError('Wrong firmware capabilities: streaming provisional decryption required.')
     ad_offset = data_offset = 0
     output = bytearray()

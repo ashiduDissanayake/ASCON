@@ -32,8 +32,15 @@ python3 model/gen_vectors.py
 # 3. Build and run every RTL testbench with Icarus Verilog
 make            # all testbenches
 make controller # just the full-AEAD controller testbench
+make handshake  # ready/valid stress and output-backpressure checks
 make clean      # remove simulation build products
 ```
+
+The provisional gateway contract is in [`docs/requirements.md`](docs/requirements.md)
+and [`docs/packet_format.md`](docs/packet_format.md). Build the Basys 3 image and
+post-route reports with `vivado -mode batch -source scripts/build_vivado.tcl`.
+Vivado 2018.1 on Windows may require the repository path as a Tcl argument; see
+the comment at the top of `scripts/build_vivado.tcl`.
 
 ## Repository layout
 

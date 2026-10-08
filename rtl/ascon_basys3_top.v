@@ -23,7 +23,8 @@
 // USB -> FT2232HQ -> UART -> this module -> ASCON -> UART -> USB.
 module ascon_basys3_top #(
     parameter integer CLK_FREQ_HZ = 100_000_000,
-    parameter integer BAUD_RATE = 115200
+    parameter integer BAUD_RATE = 115200,
+    parameter integer RX_TIMEOUT_CYCLES = CLK_FREQ_HZ / 10
 ) (
     input  wire CLK100MHZ,
     input  wire btnC,
@@ -73,6 +74,7 @@ module ascon_basys3_top #(
     );
 
     wire         ascon_start;
+    wire         ascon_abort;
     wire         ascon_decrypt;
     wire [127:0] ascon_key;
     wire [127:0] ascon_nonce;
@@ -95,7 +97,7 @@ module ascon_basys3_top #(
     wire         ascon_pc_last_out;
     wire         ascon_pc_ready_in;
 
-    ascon_uart_protocol u_protocol (
+    ascon_uart_protocol #(.RX_TIMEOUT_CYCLES(RX_TIMEOUT_CYCLES)) u_protocol (
         .clk                (CLK100MHZ),
         .rst_n              (rst_n),
         .rx_data            (rx_data),
@@ -104,6 +106,7 @@ module ascon_basys3_top #(
         .tx_valid           (tx_valid),
         .tx_busy            (tx_busy),
         .ascon_start        (ascon_start),
+        .ascon_abort        (ascon_abort),
         .ascon_decrypt      (ascon_decrypt),
         .ascon_key          (ascon_key),
         .ascon_nonce        (ascon_nonce),
@@ -129,7 +132,7 @@ module ascon_basys3_top #(
 
     ascon_controller u_ascon (
         .clk          (CLK100MHZ),
-        .rst_n        (rst_n),
+        .rst_n        (rst_n && !ascon_abort),
         .start        (ascon_start),
         .decrypt      (ascon_decrypt),
         .key          (ascon_key),
