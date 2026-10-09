@@ -34,6 +34,9 @@
 // pc_data_out's own convention, and zero-padded up to 16 bytes -- so beats
 // can be read directly into 128-bit regs with a plain %h.
 module ascon_controller_tb;
+`ifndef ASCON_DUT
+`define ASCON_DUT ascon_controller
+`endif
     reg clk, rst_n;
 
     reg          start, decrypt;
@@ -71,7 +74,7 @@ module ascon_controller_tb;
             end
         endfunction
 
-    ascon_controller dut (
+    `ASCON_DUT dut (
         .clk         (clk),
         .rst_n       (rst_n),
         .start       (start),
@@ -101,7 +104,10 @@ module ascon_controller_tb;
     always #5 clk = ~clk;
 
     // Must be >= CONTROLLER_MAX_BYTES/16 from model/gen_vectors.py.
-    localparam MAX_BEATS = 8;
+    localparam MAX_BEATS = 16;
+    reg [2047:0] vector_path;
+    integer start_cycle, cycle=0, maximum_cycles=0;
+    always @(posedge clk) cycle=cycle+1;
 
     reg [127:0] ad_beats  [0:MAX_BEATS-1];
     reg [127:0] pc_beats  [0:MAX_BEATS-1];
@@ -128,8 +134,10 @@ module ascon_controller_tb;
 
 `ifndef SYNTHESIS
     initial begin
-        $dumpfile("dump_controller.vcd");
-        $dumpvars(0, ascon_controller_tb);
+        if(!$test$plusargs("novcd")) begin
+            $dumpfile("dump_controller.vcd");
+            $dumpvars(0, ascon_controller_tb);
+        end
 
         clk = 0;
         rst_n = 0;
@@ -151,7 +159,8 @@ module ascon_controller_tb;
         #10;
 
         init_scoreboard();
-        vector_file = $fopen("vectors/controller_cases.vec", "r");
+        if(!$value$plusargs("vectors=%s",vector_path)) vector_path="vectors/controller_cases.vec";
+        vector_file = $fopen(vector_path, "r");
         if (vector_file == 0)
             $fatal(1, "could not open vectors/controller_cases.vec");
 
@@ -184,35 +193,41 @@ module ascon_controller_tb;
                 out_beat_count = 0;
                 beat_lost = 1'b0;
 
+                @(negedge clk);
                 start = 1;
-                #10;
+                start_cycle=cycle;
+                @(negedge clk);
                 start = 0;
 
                 fork
                     begin : ad_driver
                         integer k;
                         for (k = 0; k < ad_beat_count; k = k + 1) begin
-                            while (!ad_ready) #10;
+                            @(negedge clk);
                             ad_data  = ad_beats[k];
                             ad_valid = 1;
-                            #10;
+                            @(posedge clk);
+                            while (!ad_ready) @(posedge clk);
+                            @(negedge clk);
                             ad_valid = 0;
                         end
                     end
                     begin : pc_driver
                         integer k;
                         for (k = 0; k < pc_beat_count; k = k + 1) begin
-                            while (!pc_ready) #10;
+                            @(negedge clk);
                             pc_data_in = pc_beats[k];
                             pc_valid   = 1;
-                            #10;
+                            @(posedge clk);
+                            while (!pc_ready) @(posedge clk);
+                            @(negedge clk);
                             pc_valid = 0;
                         end
                     end
                     begin : pc_capture
                         while (!done) begin
-                            #10;
-                            if (pc_valid_out) begin
+                            @(posedge clk);
+                            if (pc_valid_out && pc_ready_in) begin
                                 if (out_beat_count < MAX_BEATS) begin
                                     out_beats[out_beat_count] = pc_data_out;
                                     out_beat_count = out_beat_count + 1;
@@ -225,6 +240,7 @@ module ascon_controller_tb;
                 join
 
                 #1; // let done-cycle outputs settle before sampling
+                if(cycle-start_cycle>maximum_cycles) maximum_cycles=cycle-start_cycle;
 
                 vector_ok = 1'b1;
                 if (beat_lost)                                vector_ok = 1'b0;
@@ -264,6 +280,7 @@ module ascon_controller_tb;
 
         $fclose(vector_file);
         report_summary();
+        $display("Maximum testbench service cycles: %0d (driver scheduling included)",maximum_cycles);
         $finish;
     end
 `endif

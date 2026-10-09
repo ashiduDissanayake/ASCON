@@ -47,13 +47,18 @@ def exchange_stream(stream, request, timeout=TIMEOUT):
     stream.reset_input_buffer()
     write_all(stream, encode_request(request), timeout)
     kind, count, payload = decode_record(read_exact(stream, 19, timeout))
-    if kind != 1 or count != 3 or payload[:4] != b'ASC3':
-        raise ProtocolError('Wrong firmware/protocol: expected UART v3 ASC3 hello.')
+    if kind != 1 or (count,payload[:4]) not in ((3,b'ASC3'),(4,b'ASC4')):
+        raise ProtocolError('Wrong firmware/protocol: expected ASC3 or ASC4 hello.')
+    bounded = payload[:4] == b'ASC4'
     maximum = int.from_bytes(payload[4:8], 'little')
-    if maximum < max(len(request.ad), len(request.plaintext)) or payload[8:] != b'\x01'+b'\0'*7:
-        raise ProtocolError('Wrong firmware capabilities: streaming provisional decryption required.')
+    if bounded:
+        if maximum != 256 or payload[8:] != b'\0'+(48).to_bytes(4,'little')+b'\0'*3 or len(request.ad)!=48 or not 1<=len(request.plaintext)<=256:
+            raise ProtocolError('ASC4 requires exactly 48 AD bytes and 1–256 payload bytes.')
+    elif maximum < max(len(request.ad), len(request.plaintext)) or payload[8:] != b'\x01'+b'\0'*7:
+        raise ProtocolError('Wrong ASC3 firmware capabilities.')
     ad_offset = data_offset = 0
     output = bytearray()
+    execution_cycles = execution_clock_hz = None
     while True:
         kind, count, payload = decode_record(read_exact(stream, 19, timeout))
         if kind in (0x10, 0x11):
@@ -73,6 +78,8 @@ def exchange_stream(stream, request, timeout=TIMEOUT):
             else:
                 data_offset += count
         elif kind in (0x12, 0x14):
+            if bounded and execution_cycles is None:
+                raise ProtocolError('ASC4 output arrived before its execution decision record.')
             if kind != (0x14 if request.decrypt else 0x12):
                 raise ProtocolError('Wrong output record type for this operation.')
             if ad_offset != len(request.ad):
@@ -89,7 +96,16 @@ def exchange_stream(stream, request, timeout=TIMEOUT):
                 raise ProtocolError('Premature or malformed completion record.')
             if request.decrypt and payload != request.tag:
                 raise ProtocolError('Decryption completion tag differs from the supplied tag.')
-            return Response(bytes(output), payload, b'')
+            if bounded and execution_cycles is None:
+                raise ProtocolError('ASC4 completion is missing its execution timing record.')
+            return Response(bytes(output), payload, b'', execution_cycles, execution_clock_hz)
+        elif kind == 0x15:
+            if not bounded or execution_cycles is not None or count!=8 or any(payload[8:]) or ad_offset!=len(request.ad) or data_offset!=len(request.plaintext) or output:
+                raise ProtocolError('Malformed or misplaced execution timing record.')
+            execution_cycles = int.from_bytes(payload[:4],'little')
+            execution_clock_hz = int.from_bytes(payload[4:8],'little')
+            if execution_clock_hz!=100_000_000 or execution_cycles!=59+8*(len(request.plaintext)//16):
+                raise ProtocolError('ASC4 execution timing differs from the declared 100 MHz schedule.')
         else:
             raise ProtocolError(f'Unexpected UART record type 0x{kind:02x}.')
 

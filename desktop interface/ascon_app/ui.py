@@ -95,7 +95,7 @@ class App(tk.Tk):
         self._track_widget(ttk.Button(conn, text='Refresh ports', command=self.refresh_ports)).grid(row=0, column=2, padx=(0, 10))
         self.connect_button = self._track_widget(ttk.Button(conn, text='Connect', command=self._connect))
         self.connect_button.grid(row=0, column=3)
-        ttk.Label(conn, text='115200 | UART v3').grid(row=0, column=4, padx=16)
+        ttk.Label(conn, text='115200 | UART v3 / v4').grid(row=0, column=4, padx=16)
         self.connection_status = ttk.Label(conn, textvariable=self.status, wraplength=950)
         self.connection_status.grid(row=1, column=0, columnspan=5, sticky='w', pady=(9, 0))
         self.connection_controls = [w for w in conn.winfo_children() if w is not self.connection_status]
@@ -406,6 +406,10 @@ class App(tk.Tk):
                 except UnicodeDecodeError:
                     text += 'Plaintext is binary; view the hex above.\n\n'
             text += f"TAG (hex)\n{value['tag_hex']}\n\nNONCE USED\n{value['nonce_hex']}\n\nAD (hex)\n{value['associated_data_hex']}\n\nINPUT: {value['plaintext_bytes']} bytes"
+            if value.get('execution_us') is not None:
+                text += (f"\n\nFPGA EXECUTION\n{value['execution_us']:.2f} µs "
+                         f"({value['execution_cycles']} cycles at {value['execution_clock_hz']/1_000_000:g} MHz)"
+                         "\nPacket admission to authentication decision; transport time is shown above.")
             self._show(text)
             self.status.set('Complete - ready for another request.')
         self._states()

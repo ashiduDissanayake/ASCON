@@ -1,5 +1,8 @@
 `timescale 1ns/1ps
 module ascon_controller_handshake_tb;
+`ifndef ASCON_DUT
+`define ASCON_DUT ascon_controller
+`endif
     reg clk=0; always #5 clk=~clk;
     reg rst_n=0,start=0,ad_valid=0,pc_valid=0,pc_ready_in=0;
     reg [127:0] ad_data=0,pc_data_in=0;
@@ -17,7 +20,7 @@ module ascon_controller_handshake_tb;
             end
         end
     endfunction
-    ascon_controller dut(
+    `ASCON_DUT dut(
         .clk(clk),.rst_n(rst_n),.start(start),.decrypt(1'b0),
         .key(dual_swap_64(128'h000102030405060708090A0B0C0D0E0F)),
         .nonce(dual_swap_64(128'h000102030405060708090A0B0C0D0E0F)),

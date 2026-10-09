@@ -27,6 +27,26 @@ little-endian 64-bit words with word zero in bits 127:64. Stream beats place
 byte i at bits 8*i +: 8. UART has no transaction IDs; stop-and-wait plus the
 abort/reset quiet recovery interval is mandatory.
 
+## Bounded laboratory UART v4
+
+Use `ascon_basys3_bounded_top`. The request header and grant records have the
+same layout as v3, but AD must be exactly 48 bytes and payload must be 1–256
+bytes. All bytes are loaded before the internal admission event. Hello type
+01 has count 04 and payload `ASC4 || 256_LE32 || 00 || 48_LE32 || 000000`.
+The zero flag means plaintext is buffered until successful authentication.
+
+After a successful authentication/tag decision, type 15 count 08 carries
+`elapsed_cycles_LE32 || clock_hz_LE32 || eight_zero_bytes`. For this build,
+the reported clock is 100000000 and cycles are `59 + 8*floor(payload_bytes/16)`.
+Ciphertext (type 12) or authenticated plaintext (type 14) follows, then the
+final tag (type 13). Failed authentication emits error 03 with no data/timing
+records. Error 05 means execution deadline fault and also releases no data.
+Header/input inactivity, invalid requests, and quiet recovery follow v3.
+These timings exclude UART transfer; see [deadline.md](deadline.md).
+
+This interface is a laboratory AEAD endpoint, distinct from the proposed
+session/replay/expiry policy gateway below.
+
 ## Proposed secure packet v1 (not yet a board interface)
 
 Exactly 48 bytes of associated data, followed by 1–256 ciphertext bytes, then

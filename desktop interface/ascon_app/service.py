@@ -23,6 +23,10 @@ def run_operation(transport, request, source):
         'response_hex': response.raw.hex(),
         'plaintext_bytes': len(request.plaintext),
         'round_trip_ms': round((time.perf_counter()-start)*1000, 3),
+        'execution_cycles': response.execution_cycles,
+        'execution_clock_hz': response.execution_clock_hz,
+        'execution_us': (response.execution_cycles/response.execution_clock_hz*1_000_000
+                         if response.execution_cycles is not None else None),
     }
 
 

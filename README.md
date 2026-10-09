@@ -56,3 +56,19 @@ the comment at the top of `scripts/build_vivado.tcl`.
 | `tools/` | `build_skin.py` / `vsc_hdl_tasks.py` -- regenerate schematics into a local, gitignored `build/` |
 
 Requires [Icarus Verilog](http://iverilog.icarus.com/) (`iverilog`/`vvp`) and Python 3.
+
+## Buffered execution at the two-microsecond target
+
+The optional UART v4 top, `ascon_basys3_bounded_top`, buffers exactly 48 AD bytes
+and 1–256 payload bytes before admission. Its measured worst RTL latency is
+187 cycles (nominally 1.87 us at 100 MHz), including the authentication decision.
+It withholds plaintext until authentication succeeds. Post-route timing and
+board qualification remain required; the earlier timing screenshot does not
+sign off this new design. See [the contract, verification and board steps](docs/deadline.md).
+
+```sh
+make deadline
+make bounded_uart_nominal
+make formal_deadline
+vivado -mode batch -source scripts/build_bounded_vivado.tcl
+```
