@@ -6,7 +6,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox, filedialog, font
 from .protocol import (DEFAULT_KEY, DEFAULT_AD, DEFAULT_PLAINTEXT, DEFAULT_NONCE,
                        DEFAULT_CT, DEFAULT_TAG, make_request, new_nonce, parse_hex)
-from .messages import MessageDecryptRequest, validate_envelope
+from .messages import MessageDecryptRequest, parse_decryption_json
 from .transport import SerialTransport, DemoTransport, list_ports
 from .service import run_operation, save_result
 
@@ -33,6 +33,8 @@ class App(tk.Tk):
         self.backend = tk.StringVar(value='FPGA hardware')
         self.port = tk.StringVar()
         self.encoding = tk.StringVar(value='UTF-8 text')
+        self.decrypt_format = tk.StringVar(value='Ciphertext hex')
+        self.input_hint = tk.StringVar()
         self.key = tk.StringVar()
         self.nonce = tk.StringVar()
         self.ad = tk.StringVar()
@@ -117,7 +119,10 @@ class App(tk.Tk):
         row = 2
         for label, variable in [('Key | 16 bytes, hex', self.key), ('Nonce | 16 bytes, hex', self.nonce)]:
             ttk.Label(left, text=label).grid(row=row, column=0, sticky='w', pady=(7, 3))
-            self._track_widget(ttk.Entry(left, textvariable=variable, font=(self.code_font, 10))).grid(row=row+1, column=0, sticky='ew')
+            entry = self._track_widget(ttk.Entry(left, textvariable=variable, font=(self.code_font, 10)))
+            entry.grid(row=row+1, column=0, sticky='ew')
+            if variable is self.nonce:
+                self.nonce_entry = entry
             row += 2
         self.nonce_check = self._track_widget(ttk.Checkbutton(left, text='Fresh random nonce for each encryption', variable=self.auto_nonce))
         self.nonce_check.grid(row=6, column=0, sticky='w', pady=(5, 0))
@@ -128,26 +133,43 @@ class App(tk.Tk):
         self.encoding_combo.pack(side='right')
         self.encoding_combo.bind('<<ComboboxSelected>>', self._encoding_changed)
         ttk.Label(left, text='Associated data | streamed in 16-byte blocks').grid(row=8, column=0, sticky='w', pady=(8, 3))
-        self._track_widget(ttk.Entry(left, textvariable=self.ad)).grid(row=9, column=0, sticky='ew')
-        self._track_widget(ttk.Checkbutton(left, text='Use empty AD', variable=self.empty_ad)).grid(row=10, column=0, sticky='w')
+        self.ad_entry = self._track_widget(ttk.Entry(left, textvariable=self.ad))
+        self.ad_entry.grid(row=9, column=0, sticky='ew')
+        self.empty_ad_check = self._track_widget(ttk.Checkbutton(left, text='Use empty AD', variable=self.empty_ad))
+        self.empty_ad_check.grid(row=10, column=0, sticky='w')
+        self.decrypt_format_combo = self._track_widget(ttk.Combobox(left, textvariable=self.decrypt_format,
+            values=['Ciphertext hex', 'Message / result JSON'], state='readonly'), 'readonly')
+        self.decrypt_format_combo.grid(row=11, column=0, sticky='ew', pady=(7, 0))
+        self.decrypt_format_combo.bind('<<ComboboxSelected>>', lambda _: self._states())
         self.data_label = ttk.Label(left)
-        self.data_label.grid(row=11, column=0, sticky='w', pady=(7, 3))
-        self._track_widget(ttk.Entry(left, textvariable=self.data)).grid(row=12, column=0, sticky='ew')
-        self._track_widget(ttk.Checkbutton(left, text='Use empty input data', variable=self.empty_data)).grid(row=13, column=0, sticky='w')
-        ttk.Label(left, text='Authentication tag | decryption only, hex').grid(row=14, column=0, sticky='w', pady=(7, 3))
+        self.data_label.grid(row=12, column=0, sticky='w', pady=(7, 3))
+        data_frame = ttk.Frame(left)
+        data_frame.grid(row=13, column=0, sticky='ew')
+        self.data_input = self._track_widget(tk.Text(data_frame, width=32, height=5, wrap='word', font=(self.code_font, 10)))
+        self.data_input.pack(side='left', fill='both', expand=True)
+        self.data_scroll = ttk.Scrollbar(data_frame, orient='vertical', command=self.data_input.yview)
+        self.data_scroll.pack(side='right', fill='y')
+        self.data_input.configure(yscrollcommand=self.data_scroll.set)
+        self.data_input.bind('<<Modified>>', self._data_modified)
+        self.data.trace_add('write', self._sync_data_input)
+        self.empty_data_check = self._track_widget(ttk.Checkbutton(left, text='Use empty input data', variable=self.empty_data))
+        self.empty_data_check.grid(row=14, column=0, sticky='w')
+        ttk.Label(left, text='Authentication tag | raw ciphertext only, hex').grid(row=15, column=0, sticky='w', pady=(7, 3))
         self.tag_entry = self._track_widget(ttk.Entry(left, textvariable=self.tag, font=(self.code_font, 10)))
-        self.tag_entry.grid(row=15, column=0, sticky='ew')
+        self.tag_entry.grid(row=16, column=0, sticky='ew')
         file_actions = ttk.Frame(left)
-        file_actions.grid(row=16, column=0, sticky='ew', pady=(10, 0))
-        self._track_widget(ttk.Button(file_actions, text='Load AD file', command=lambda: self._load_file(True))).pack(side='left')
-        self._track_widget(ttk.Button(file_actions, text='Load data file', command=lambda: self._load_file(False))).pack(side='right')
-        self._track_widget(ttk.Button(left, text='Import encrypted message JSON', command=self._import_message)).grid(row=19, column=0, sticky='w', pady=(7, 0))
+        file_actions.grid(row=17, column=0, sticky='ew', pady=(10, 0))
+        self.load_ad_button = self._track_widget(ttk.Button(file_actions, text='Load AD file', command=lambda: self._load_file(True)))
+        self.load_ad_button.pack(side='left')
+        self.load_data_button = self._track_widget(ttk.Button(file_actions, text='Load data file', command=lambda: self._load_file(False)))
+        self.load_data_button.pack(side='right')
+        self._track_widget(ttk.Button(left, text='Import encrypted result JSON', command=self._import_message)).grid(row=20, column=0, sticky='w', pady=(7, 0))
         actions = ttk.Frame(left)
-        actions.grid(row=17, column=0, sticky='ew', pady=(12, 0))
+        actions.grid(row=18, column=0, sticky='ew', pady=(12, 0))
         self.send_button = ttk.Button(actions, text='Send & encrypt', style='Accent.TButton', command=self._send, state='disabled')
         self.send_button.pack(side='left')
         self._track_widget(ttk.Button(actions, text='Load defaults', command=self._defaults)).pack(side='right')
-        ttk.Label(left, text='Messages above 256 bytes are split automatically (up to 8192 bytes).\nChunked messages use fresh nonces and one tag per chunk.\nBlank fields use defaults; tick "Use empty" for zero bytes.', font=(self.ui_font, 9)).grid(row=18, column=0, sticky='w', pady=(9, 0))
+        ttk.Label(left, textvariable=self.input_hint, wraplength=400, font=(self.ui_font, 9)).grid(row=19, column=0, sticky='w', pady=(9, 0))
         result_header = ttk.Frame(right)
         result_header.pack(fill='x', pady=(0, 10))
         self.auth_badge = ttk.Label(result_header, textvariable=self.auth_status, style='Neutral.TLabel')
@@ -241,10 +263,12 @@ class App(tk.Tk):
                 return 'break'
         # Prefer the result pane's own scroll; otherwise scroll the page only
         # when the reduced window has caused the outer scrollbar to appear.
-        if event.widget in (self.output, self.output_scroll):
-            first, last = self.output.yview()
+        pane = (self.output if event.widget in (self.output, self.output_scroll) else
+                self.data_input if event.widget in (self.data_input, self.data_scroll) else None)
+        if pane is not None:
+            first, last = pane.yview()
             if (units < 0 and first > 0.00001) or (units > 0 and last < 0.99999):
-                self.output.yview_scroll(units, 'units')
+                pane.yview_scroll(units, 'units')
         elif self.page_scroll.winfo_ismapped():
             first, last = self.canvas.yview()
             if (units < 0 and first > 0.00001) or (units > 0 and last < 0.99999):
@@ -279,6 +303,7 @@ class App(tk.Tk):
 
     def _defaults(self):
         decrypt = self.operation.get() != 'Encrypt'
+        self.decrypt_format.set('Ciphertext hex')
         self.encoding.set('UTF-8 text')
         self.key.set(DEFAULT_KEY)
         self.nonce.set(DEFAULT_NONCE if decrypt else new_nonce())
@@ -291,6 +316,30 @@ class App(tk.Tk):
         self.data_label.configure(text='Ciphertext | hex, streamed in 16-byte blocks' if decrypt else 'Plaintext | streamed in 16-byte blocks')
         self.send_button.configure(text='Send & decrypt' if decrypt else 'Send & encrypt')
         self._states()
+
+    def _data_modified(self, _=None):
+        if not self.data_input.edit_modified():
+            return
+        self.data_input.edit_modified(False)
+        value = self.data_input.get('1.0', 'end-1c')
+        if value != self.data.get():
+            self.data.set(value)
+
+    def _sync_data_input(self, *_):
+        value = self.data.get()
+        if self.data_input.get('1.0', 'end-1c') != value:
+            state = self.data_input.cget('state')
+            self.data_input.configure(state='normal')
+            self.data_input.delete('1.0', 'end')
+            self.data_input.insert('1.0', value)
+            self.data_input.edit_modified(False)
+            self.data_input.configure(state=state)
+        if self.operation.get() != 'Encrypt' and value.lstrip().startswith('{'):
+            self.decrypt_format.set('Message / result JSON')
+            self._states()
+
+    def _json_mode(self):
+        return self.operation.get() != 'Encrypt' and self.decrypt_format.get() == 'Message / result JSON'
 
     def _encoding_changed(self, _=None):
         # Preserve the bytes when switching display encodings.
@@ -305,14 +354,27 @@ class App(tk.Tk):
             messagebox.showerror('Encoding', 'These values cannot be converted. Keep hex mode for arbitrary bytes.')
 
     def _states(self):
+        decrypt = self.operation.get() != 'Encrypt'
+        json_mode = self._json_mode()
         for widget, normal in self.controls:
             widget.configure(state='disabled' if self.pending else normal)
         if not self.pending:
             if self.transport:
                 self.backend_combo.configure(state='disabled')
                 self.port_combo.configure(state='disabled')
-            self.tag_entry.configure(state='normal' if self.operation.get() != 'Encrypt' else 'disabled')
-            self.nonce_check.configure(state='normal' if self.operation.get() == 'Encrypt' else 'disabled')
+            self.decrypt_format_combo.configure(state='readonly' if decrypt else 'disabled')
+            self.tag_entry.configure(state='normal' if decrypt and not json_mode else 'disabled')
+            self.nonce_check.configure(state='normal' if not decrypt else 'disabled')
+            for widget in (self.nonce_entry, self.ad_entry, self.empty_ad_check,
+                           self.empty_data_check, self.load_ad_button, self.load_data_button):
+                widget.configure(state='disabled' if json_mode else 'normal')
+            self.encoding_combo.configure(state='disabled' if json_mode else 'readonly')
+        self.data_label.configure(text=('Encrypted message / result JSON' if json_mode else
+                                        'Ciphertext | hex' if decrypt else 'Plaintext'))
+        self.input_hint.set('Paste or import the full encrypted JSON and enter its key.\nNonce, AD and tags come from the JSON; the fields above are ignored.' if json_mode else
+                            'For chunked messages, paste/import the full JSON.\nRaw ciphertext needs its original nonce, AD and tag.' if decrypt else
+                            'Messages above 256 bytes are split automatically (up to 8192 bytes).\nBlank fields use defaults; tick "Use empty" for zero bytes.\nThe example key is for lab testing.')
+        self.copy_button.configure(text='Copy message JSON' if self.result and 'message' in self.result and self.result['operation'] == 'encrypt' else 'Copy output hex')
         self.send_button.configure(state='normal' if self.transport and not self.pending else 'disabled')
         for button in (self.save_button, self.copy_button):
             button.configure(state='normal' if self.result and not self.pending else 'disabled')
@@ -345,11 +407,10 @@ class App(tk.Tk):
     def _send(self):
         decrypt = self.operation.get() != 'Encrypt'
         try:
-            if decrypt and self.data.get().lstrip().startswith('{'):
+            if decrypt and (self._json_mode() or self.data.get().lstrip().startswith('{')):
                 key = parse_hex(self.key.get().strip() or DEFAULT_KEY, 'Key')
-                envelope = json.loads(self.data.get())
-                request = MessageDecryptRequest(key, envelope)
-                validate_envelope(envelope, key)
+                request = parse_decryption_json(self.data.get(), key)
+                self._set_decryption_input(request)
             else:
                 nonce = new_nonce() if self.auto_nonce.get() and not decrypt else self.nonce.get()
                 request = make_request(self.key.get(), nonce, self.ad.get(), self.data.get(),
@@ -428,6 +489,9 @@ class App(tk.Tk):
                     text += f"\nTOTAL FPGA EXECUTION: {value['total_execution_us']:.2f} µs\n"
                     text += 'PER CHUNK (µs): ' + ', '.join(f'{t:.2f}' for t in value['chunk_execution_us']) + '\n'
                 self.nonce.set(value['nonce_hex'])
+                for chunk in value['message']['chunks']:
+                    text += (f"\nCHUNK {chunk['index']+1}\n"
+                             f"Nonce: {chunk['nonce_hex']}\nTag: {chunk['tag_hex']}\n")
             else:
                 text += f"TAG (hex)\n{value['tag_hex']}\n\nNONCE USED\n{value['nonce_hex']}\n"
             text += f"\nAD (hex)\n{value['associated_data_hex']}\n\nINPUT: {value['plaintext_bytes']} bytes"
@@ -449,34 +513,40 @@ class App(tk.Tk):
 
     def _load_decrypt(self):
         result, request = self.result, self.last_request
-        self.operation.set('Decrypt + verify')
-        self._defaults()
-        self.encoding.set('Hex bytes')
         self.key.set(request.key.hex())
-        if 'message' in result:
-            self._set_message_input(result['message'])
-            return
-        self.nonce.set(result['nonce_hex'])
-        self.ad.set(result['associated_data_hex'])
-        self.data.set(result['ciphertext_hex'])
-        self.tag.set(result['tag_hex'])
-        self.empty_ad.set(not request.ad)
-        self.empty_data.set(not request.plaintext)
-        self.status.set('Previous encryption loaded. Send to verify and recover the plaintext.')
+        self._set_decryption_input(parse_decryption_json(json.dumps(result), request.key))
 
     def _set_message_input(self, envelope):
+        self._set_decryption_input(MessageDecryptRequest(parse_hex(self.key.get().strip() or DEFAULT_KEY, 'Key'), envelope))
+
+    def _set_decryption_input(self, request):
         self.operation.set('Decrypt + verify')
         self.encoding.set('Hex bytes')
         self.auto_nonce.set(False)
-        self.empty_ad.set(False)
-        self.empty_data.set(False)
-        self.data.set(json.dumps(envelope, separators=(',', ':')))
-        self.ad.set(envelope['associated_data_hex'])
-        self.nonce.set(envelope['base_nonce_hex'])
-        self.tag.set('')
-        self.data_label.configure(text='Encrypted message JSON | includes all chunk tags')
+        if isinstance(request, MessageDecryptRequest):
+            envelope = request.envelope
+            self.decrypt_format.set('Message / result JSON')
+            self.empty_ad.set(False)
+            self.empty_data.set(False)
+            self.data.set(json.dumps(envelope, indent=2))
+            self.ad.set(envelope['associated_data_hex'])
+            self.nonce.set(envelope['base_nonce_hex'])
+            self.tag.set('Included per chunk in JSON')
+        else:
+            self.decrypt_format.set('Ciphertext hex')
+            self.data.set(request.plaintext.hex())
+            self.ad.set(request.ad.hex())
+            self.nonce.set(request.nonce.hex())
+            self.tag.set(request.tag.hex())
+            self.empty_ad.set(not request.ad)
+            self.empty_data.set(not request.plaintext)
         self.send_button.configure(text='Send & decrypt')
-        self.status.set('Chunked message loaded. Enter its key, then send to verify all chunks.')
+        self.result = None
+        self.round_trip.set('Round trip: —')
+        self.output_status.set('Encrypted input loaded; not yet verified')
+        self._set_result_status('Ready to verify', 'Neutral')
+        self._show('Send the loaded encrypted input to verify and decrypt it.')
+        self.status.set('Encrypted result loaded. Enter its key, then send to verify and decrypt.')
         self._states()
 
     def _import_message(self):
@@ -488,12 +558,8 @@ class App(tk.Tk):
                 raw = stream.read(1_000_001)
             if len(raw) > 1_000_000:
                 raise ValueError('Message JSON exceeds the import limit.')
-            value = json.loads(raw)
-            if not isinstance(value, dict):
-                raise ValueError('Expected an encrypted message JSON object.')
-            envelope = value.get('message', value)
-            validate_envelope(envelope, parse_hex(self.key.get().strip() or DEFAULT_KEY, 'Key'))
-            self._set_message_input(envelope)
+            request = parse_decryption_json(raw, parse_hex(self.key.get().strip() or DEFAULT_KEY, 'Key'))
+            self._set_decryption_input(request)
         except (OSError, ValueError) as exc:
             messagebox.showerror('Import failed', str(exc))
 
@@ -508,7 +574,11 @@ class App(tk.Tk):
 
     def _copy(self):
         self.clipboard_clear()
-        self.clipboard_append(self.result['plaintext_hex'] if self.result['operation'] == 'decrypt' else self.result['ciphertext_hex'])
+        if self.result['operation'] == 'encrypt' and 'message' in self.result:
+            self.clipboard_append(json.dumps(self.result['message'], indent=2))
+            self.status.set('Full encrypted message JSON copied, including all nonces and tags.')
+        else:
+            self.clipboard_append(self.result['plaintext_hex'] if self.result['operation'] == 'decrypt' else self.result['ciphertext_hex'])
 
     def _close(self):
         if self.pending:

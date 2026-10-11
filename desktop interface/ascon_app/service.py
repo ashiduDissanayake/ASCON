@@ -8,9 +8,7 @@ from .messages import MessageDecryptRequest, encrypt_message, decrypt_message
 
 def run_operation(transport, request, source, progress=None):
     start = time.perf_counter()
-    if isinstance(request, MessageDecryptRequest) or len(request.plaintext) > 256:
-        if request.decrypt and not isinstance(request, MessageDecryptRequest):
-            raise ValueError('Large-message decryption requires the exported chunked message JSON, including every nonce and tag.')
+    if isinstance(request, MessageDecryptRequest) or (not request.decrypt and len(request.plaintext) > 256):
         if request.decrypt:
             plaintext, responses = decrypt_message(transport, request, progress)
             envelope = request.envelope
