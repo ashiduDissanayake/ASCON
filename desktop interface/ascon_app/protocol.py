@@ -1,6 +1,7 @@
 """Pure validation and packet functions; no UI or serial dependency."""
 from dataclasses import dataclass
 import secrets
+from typing import Optional
 
 DEFAULT_KEY = '000102030405060708090a0b0c0d0e0f'
 DEFAULT_AD = 'ASCON'
@@ -34,6 +35,8 @@ class Response:
     ciphertext: bytes
     tag: bytes
     raw: bytes
+    execution_cycles: Optional[int] = None
+    execution_clock_hz: Optional[int] = None
 
 
 def new_nonce():
@@ -79,9 +82,10 @@ def decode_record(raw):
     if kind == 0x7F:
         errors = {
             1: 'FPGA rejected the command. Program the UART v3 streaming bitstream.',
-            2: 'FPGA rejected an excessive length. Maximum AD and payload: 8192 bytes each.',
+            2: 'FPGA rejected the length profile. ASC4 needs exactly 48 AD bytes and 1–256 payload bytes; ASC3 allows 0–8192 bytes each.',
             3: 'Authentication failed. Provisional plaintext discarded; no result accepted.',
             4: 'FPGA receive timeout. Transaction aborted. Reset before reconnecting.',
+            5: 'FPGA execution deadline fault. No output was released.',
         }
         raise ProtocolError(errors.get(count, f'FPGA error {count:02x}'))
     return kind, count, payload
