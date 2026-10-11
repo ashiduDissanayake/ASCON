@@ -136,10 +136,14 @@ class MessageTests(unittest.TestCase):
             with self.assertRaisesRegex(ProtocolError, 'Authentication failed'):
                 self.decrypt(variant)
 
-    def test_raw_large_ciphertext_requires_envelope(self):
+    def test_legacy_large_raw_ciphertext_still_decrypts_on_asc3(self):
         request = self.request()
-        with self.assertRaisesRegex(ValueError, 'exported chunked'):
-            run_operation(DemoTransport(), Request(request.key,request.nonce,request.ad,request.plaintext,True,b't'*16), 'test')
+        response = DemoTransport().run(request)
+        decrypt = Request(request.key,request.nonce,request.ad,response.ciphertext,True,response.tag)
+        result = run_operation(UARTTransport(bounded=False), decrypt, 'test')
+        self.assertEqual(result['plaintext_hex'], request.plaintext.hex())
+        with self.assertRaisesRegex(ProtocolError, 'ASC4 supports'):
+            run_operation(UARTTransport(), decrypt, 'test')
 
     def test_application_ad_all_lengths_and_limits(self):
         for ad in [b'', b'a'*48, b'a'*8192]:
@@ -160,11 +164,13 @@ class MessageTests(unittest.TestCase):
         app = SimpleNamespace(**{name:Variable(value) for name,value in {
             'operation':'Encrypt', 'key':'6b'*16, 'nonce':'6e'*16, 'ad':'mission',
             'data':'x'*1000, 'encoding':'UTF-8 text', 'auto_nonce':True,
-            'empty_ad':False, 'empty_data':False, 'tag':'', 'round_trip':'',
+            'empty_ad':False, 'empty_data':False, 'tag':'', 'round_trip':'', 'decrypt_format':'Ciphertext hex',
             'output_status':'', 'status':''}.items()})
         app.transport=DemoTransport(); app.source='test'
         app.events=__import__('queue').Queue()
         app._set_result_status=lambda *args: None
+        app._json_mode=lambda: App._json_mode(app)
+        app._set_decryption_input=lambda request: App._set_decryption_input(app, request)
         app._show=lambda text: None
         app._work=lambda kind, fn: setattr(app, 'result', fn())
         App._send(app)

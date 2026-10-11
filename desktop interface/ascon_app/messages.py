@@ -1,6 +1,7 @@
 """Versioned host message framing above the unchanged single-operation UART ABI."""
 from dataclasses import dataclass
 import hashlib
+import json
 import secrets
 import struct
 from .protocol import Request, ProtocolError
@@ -18,6 +19,34 @@ class MessageDecryptRequest:
     def __post_init__(self):
         if len(self.key) != 16:
             raise ValueError('Key must contain exactly 16 bytes.')
+
+
+def parse_decryption_json(text, key):
+    """Accept an envelope, full chunked export, or legacy single-result export."""
+    if len(text) > 1_000_000:
+        raise ProtocolError('Message JSON exceeds the import limit.')
+    try:
+        value = json.loads(text)
+    except ValueError as exc:
+        raise ProtocolError('Enter valid encrypted message/result JSON.') from exc
+    if not isinstance(value, dict):
+        raise ProtocolError('Expected an encrypted message JSON object.')
+    if 'message' in value or value.get('format') == FORMAT:
+        envelope = value.get('message', value)
+        validate_envelope(envelope, key)
+        return MessageDecryptRequest(key, envelope)
+    if value.get('format') != 'basys3-ascon-result-v3' or value.get('algorithm') != 'Ascon-AEAD128':
+        raise ProtocolError('Unrecognized encrypted result format.')
+    def field(name):
+        raw = value.get(name)
+        if not isinstance(raw, str) or len(raw) > MAX_MESSAGE_BYTES*2:
+            raise ProtocolError(f'Missing or invalid {name} in encrypted result.')
+        try:
+            return bytes.fromhex(raw)
+        except ValueError as exc:
+            raise ProtocolError(f'Invalid hex in {name}.') from exc
+    return Request(key, field('nonce_hex'), field('associated_data_hex'),
+                   field('ciphertext_hex'), True, field('tag_hex'))
 
 
 def chunk_ad(ad, base_nonce, index, count, length):

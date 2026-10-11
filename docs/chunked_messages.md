@@ -18,8 +18,9 @@ same message layer; it is currently implemented in the desktop application.
    inputs are split automatically. The GUI shows completed chunk counts.
 2. Export the full result JSON. It contains a `message` object with all chunk
    nonces, ciphertexts and tags. It excludes the secret key and plaintext.
-3. Click **Load this result for decryption**, or **Import encrypted message
-   JSON** and enter the matching key, then **Send & decrypt**. The imported
+3. Click **Load this result for decryption**, or **Copy message JSON** and paste
+   it into the multiline decryption input, or **Import encrypted result JSON**
+   and enter the matching key, then **Send & decrypt**. The imported
    envelope supplies its own AD, nonce and tags; the separate form fields are
    not used to change those authenticated values.
 4. Plaintext appears only after all chunks authenticate. Structural errors,
@@ -27,7 +28,19 @@ same message layer; it is currently implemented in the desktop application.
 
 For 1000 bytes the payload lengths are 256, 256, 256 and 232 bytes. The copied
 ciphertext hex alone is insufficient for decryption; keep the full JSON.
-Large raw ciphertext pasted without its message envelope is rejected.
+The decryption selector distinguishes **Ciphertext hex** from **Message / result
+JSON**. Pasting JSON selects JSON mode automatically. It accepts the bare message
+envelope and the complete exported result wrapper. In JSON mode the separate
+nonce, AD, encoding, empty-input and tag controls are disabled: the JSON supplies
+the authenticated metadata. The result pane lists each chunk's nonce and tag.
+Loading encrypted input clears the previous result until verification completes.
+
+Older single-operation result JSON files can also be imported or pasted. They
+populate the raw ciphertext fields, including empty AD/payload flags, while
+preserving the key entered by the user. Raw legacy ciphertext above 256 bytes
+can still be decrypted by ASC3 (up to 8192 bytes) or the software demo; ASC4
+rejects that raw length. Concatenated chunk ciphertext is insufficient because
+it has multiple nonces and tags: use the complete message JSON for chunked data.
 
 ## Version 1 framing
 
@@ -78,5 +91,7 @@ The original post-route/board qualification limitations still apply.
 Run `python -m unittest discover -s tests -v`. Host tests cover reference
 round-trips through the UART parser for ASC3, both ASC4 capability profiles,
 lengths 257/512/1000/8192, malformed envelopes, late authentication failures,
-AD commitment, fresh nonces, JSON export/import, and headless GUI handlers.
+AD commitment, fresh nonces, JSON export/import, clipboard/paste round-trips,
+metadata control states, multiline editing, legacy imports and headless GUI
+verification/failure handlers.
 These tests do not constitute physical-board validation.
