@@ -117,7 +117,7 @@ def compare_lwc_kat(path: Path) -> dict[str, Any]:
             )
 
     return {
-        "source": str(path),
+        "source": path.relative_to(ROOT.parent).as_posix(),
         "availableVectors": len(records),
         "checkedVectors": checked,
         "coveragePercent": round(100 * checked / len(records), 2) if records else 0,

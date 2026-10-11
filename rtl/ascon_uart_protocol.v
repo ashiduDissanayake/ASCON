@@ -19,7 +19,10 @@
 // 
 
 
-module ascon_uart_protocol (
+module ascon_uart_protocol #(
+    parameter integer RX_TIMEOUT_CYCLES = 10_000_000,
+    parameter [31:0] MAX_LENGTH = 8192
+) (
     input  wire         clk,
     input  wire         rst_n,
 
@@ -31,6 +34,7 @@ module ascon_uart_protocol (
     input  wire         tx_busy,
 
     output reg          ascon_start,
+    output reg          ascon_abort,
     output reg          ascon_decrypt,
     output reg  [127:0] ascon_key,
     output reg  [127:0] ascon_nonce,
@@ -68,8 +72,10 @@ module ascon_uart_protocol (
     // Both operations stream through a 128-bit output register; no message RAM.
     localparam [4:0] IDLE=0, HEADER=1, CHECK=2, LAUNCH=3, DISPATCH=4,
         RX_AD=5, AD_HOLD=6, RX_PC=7, PC_HOLD=8, WAIT_OUT=9,
-        FINISH=10, EMIT_DONE=12, TX_RECORD=13, TX_DRAIN=14;
+        FINISH=10, EMIT_DONE=12, TX_RECORD=13, TX_DRAIN=14, RECOVER=15;
     reg [4:0] state, after_tx;
+    reg [31:0] idle_cycles;
+    wire receiving = state==HEADER || state==RX_AD || state==RX_PC;
     reg [6:0] header_index;
     reg [4:0] rx_index, chunk_count, tx_index;
     reg [7:0] command, record_type, record_count;
@@ -114,17 +120,28 @@ module ascon_uart_protocol (
             done_seen<=0;authenticated<=0;
             tx_data<=0;tx_valid<=0;
             ascon_start<=0;ascon_decrypt<=0;ascon_key<=0;ascon_nonce<=0;
+            ascon_abort<=0;idle_cycles<=0;
             ascon_ad_len<=0;ascon_pc_len<=0;ascon_tag_in<=0;
             ascon_ad_valid<=0;ascon_pc_valid<=0;
             ascon_ad_data<=0;ascon_pc_data<=0;ascon_pc_ready_in<=0;
         end else begin
             tx_valid<=0;ascon_start<=0;ascon_pc_ready_in<=0;
+            ascon_abort<=0;
+            if (rx_valid || (!receiving && state!=RECOVER)) idle_cycles<=0;
+            else if (idle_cycles < RX_TIMEOUT_CYCLES) idle_cycles<=idle_cycles+1;
             // Completion can occur while the last ciphertext record is still
             // being transmitted; retain its pulse and tag until FINISH.
             if(ascon_done) begin
                 done_seen<=1; authenticated<=ascon_auth_ok; tag_buf<=ascon_tag_out;
             end
-            case(state)
+            if (receiving && !rx_valid && idle_cycles >= RX_TIMEOUT_CYCLES-1) begin
+                ascon_abort<=1;ascon_ad_valid<=0;ascon_pc_valid<=0;
+                done_seen<=0;authenticated<=0;tag_buf<=0;input_buf<=0;
+                ascon_key<=0;ascon_nonce<=0;ascon_tag_in<=0;
+                ascon_ad_data<=0;ascon_pc_data<=0;
+                ad_left<=0;pc_left<=0;idle_cycles<=0;
+                send_record(8'h7F,8'h04,128'd0,RECOVER);
+            end else case(state)
                 IDLE: if(rx_valid && rx_data==8'hA5) begin
                     header_index<=1;state<=HEADER;
                     done_seen<=0;authenticated<=0;
@@ -142,12 +159,14 @@ module ascon_uart_protocol (
                 end
                 CHECK: begin
                     if(command!=8'h11 && command!=8'h12)
-                        send_record(8'h7F,8'h01,128'd0,IDLE);
+                        send_record(8'h7F,8'h01,128'd0,RECOVER);
+                    else if(ascon_ad_len>MAX_LENGTH || ascon_pc_len>MAX_LENGTH)
+                        send_record(8'h7F,8'h02,128'd0,RECOVER);
                     else begin
                         ascon_decrypt<=(command==8'h12);
                         ad_left<=ascon_ad_len;pc_left<=ascon_pc_len;
                         // Hello: ASC3, max length LE32, provisional-output flag, zeros.
-                        send_record(8'h01,8'd3,{56'd0,8'd1,32'hFFFFFFFF,32'h33435341},LAUNCH);
+                        send_record(8'h01,8'd3,{56'd0,8'd1,MAX_LENGTH,32'h33435341},LAUNCH);
                     end
                 end
                 LAUNCH: if(!ascon_busy) begin
@@ -210,6 +229,12 @@ module ascon_uart_protocol (
                     else tx_index<=tx_index+1'b1;
                 end
                 TX_DRAIN: if(!tx_busy && !tx_valid) state<=after_tx;
+                RECOVER: if(!rx_valid && idle_cycles >= RX_TIMEOUT_CYCLES-1) begin
+                    done_seen<=0;authenticated<=0;tag_buf<=0;input_buf<=0;
+                    ascon_key<=0;ascon_nonce<=0;ascon_tag_in<=0;
+                    ascon_ad_data<=0;ascon_pc_data<=0;
+                    state<=IDLE;idle_cycles<=0;
+                end
                 default: state<=IDLE;
             endcase
         end

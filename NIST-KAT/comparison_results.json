@@ -603,7 +603,7 @@
     }
   ],
   "lwcKAT": {
-    "source": "/Users/ashidudissanayake/Dev/ASCON/NIST-KAT/LWC_AEAD_KAT_128_128.txt",
+    "source": "NIST-KAT/LWC_AEAD_KAT_128_128.txt",
     "availableVectors": 1089,
     "checkedVectors": 1089,
     "coveragePercent": 100.0,

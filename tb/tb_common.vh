@@ -54,10 +54,8 @@ endtask
 task automatic report_summary;
 begin
     $display("SUMMARY vectors=%0d pass=%0d fail=%0d", vector_count, pass_count, fail_count);
-    if (fail_count != 0) begin
-        $display("verification failed");
-        $finish;
-    end
+    if (fail_count != 0 || vector_count == 0)
+        $fatal(1, "verification failed or zero vectors executed");
 end
 endtask
 
