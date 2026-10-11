@@ -5,6 +5,7 @@ module ascon_buffered_tb;
     reg response_ready=0,pc_ready_in=0;
     reg [127:0] key=0,nonce=0,tag_in=0,ad_data=0,pc_data_in=0;
     reg [8:0] payload_len=0;
+    reg [5:0] ad_len=48;
     wire config_ready,ad_ready,pc_ready,admit_ready,busy,response_valid,auth_ok,pc_valid_out,pc_last_out;
     wire [1:0] error_code;
     wire [127:0] tag_out,pc_data_out;
@@ -33,20 +34,20 @@ module ascon_buffered_tb;
             rc=$fscanf(f,"%d",dir);
             if(rc==1) begin
                 rc=$fscanf(f,"%h %h %d",rk,rn,a);
-                if(a!=48)$fatal(1,"wrong test AD length");
-                for(j=0;j<3;j=j+1)rc=$fscanf(f,"%h",ads[j]);
+                if(a<0 || a>48)$fatal(1,"wrong test AD length");
+                for(j=0;j<(a+15)/16;j=j+1)rc=$fscanf(f,"%h",ads[j]);
                 rc=$fscanf(f,"%d",m);
                 for(j=0;j<(m+15)/16;j=j+1)rc=$fscanf(f,"%h",inputs[j]);
                 rc=$fscanf(f,"%h",rt);
                 for(j=0;j<(m+15)/16;j=j+1)rc=$fscanf(f,"%h",expected[j]);
                 rc=$fscanf(f,"%h %d",expected_tag,ok);
                 @(negedge clk);key=swap64(rk);nonce=swap64(rn);tag_in=swap64(rt);
-                decrypt=dir;payload_len=m;config_valid=1;
+                decrypt=dir;payload_len=m;ad_len=a;config_valid=1;
                 @(negedge clk);config_valid=0;key=~key;nonce=~nonce;tag_in=~tag_in;
                 fork
                     begin:load_ad
                         integer i;
-                        for(i=0;i<3;i=i+1)begin
+                        for(i=0;i<(a+15)/16;i=i+1)begin
                             repeat(1+(i+number)%3)@(negedge clk);
                             ad_data=ads[i];ad_valid=1;
                             @(posedge clk);while(!ad_ready)@(posedge clk);
@@ -71,7 +72,7 @@ module ascon_buffered_tb;
                     if(cycle-accepted>=199)$fatal(1,"missed deadline");
                     @(negedge clk);
                 end
-                if(elapsed_cycles!=cycle-accepted || elapsed_cycles!=59+8*(m/16))
+                if(elapsed_cycles!=cycle-accepted || elapsed_cycles!=27+8*(a==0 ? 0:a/16+1)+8*(m/16))
                     $fatal(1,"cycle mismatch length=%0d reported=%0d measured=%0d",m,elapsed_cycles,cycle-accepted);
                 if(elapsed_cycles>maximum)maximum=elapsed_cycles;
                 if(auth_ok!==ok[0] || error_code!==(ok ? 2'd0:2'd1) || tag_out!==swap64(expected_tag))
@@ -101,8 +102,8 @@ module ascon_buffered_tb;
         end
         $fclose(f);
         // Invalid profiles must fail admission and never expose stale output.
-        for(j=0;j<2;j=j+1)begin
-            payload_len=j==0 ? 0:257;config_valid=1;
+        for(j=0;j<3;j=j+1)begin
+            ad_len=j==2 ? 49:48;payload_len=j==0 ? 0:j==1 ? 257:16;config_valid=1;
             @(negedge clk);config_valid=0;
             if(!response_valid || auth_ok || error_code!=2 || admit_ready || pc_valid_out)
                 $fatal(1,"invalid profile accepted");
@@ -110,7 +111,7 @@ module ascon_buffered_tb;
         end
         // Reset while loading, executing, and holding authenticated output.
         for(j=0;j<3;j=j+1)begin
-            payload_len=16;decrypt=0;key=0;nonce=0;config_valid=1;
+            ad_len=48;payload_len=16;decrypt=0;key=0;nonce=0;config_valid=1;
             @(negedge clk);config_valid=0;
             if(j!=0)begin
                 ad_valid=1;pc_valid=1;ad_data=0;pc_data_in=0;

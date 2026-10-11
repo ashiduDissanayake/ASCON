@@ -23,16 +23,17 @@ def main():
     if not args.bitstream.is_file():parser.error('build/program the bounded bitstream first; supply its path with --bitstream')
     results=[];key=secrets.token_bytes(16);ad=bytes(range(48));transport=SerialTransport(args.port)
     try:
-        for size in [1,16,17,128,256]:
+        for ad_size,size in [(a,m) for a in [0,1,15,16,17,31,32,33,47,48] for m in [1,16,17,128,256]]:
+            ad=bytes(range(ad_size))
             nonce=secrets.token_bytes(16);plain=secrets.token_bytes(size)
             cipher,tag=encrypt(key,nonce,ad,plain)
             for direction in [False,True]:
                 response=transport.run(Request(key,nonce,ad,cipher if direction else plain,direction,tag if direction else b''))
                 if response.ciphertext!=(plain if direction else cipher) or response.tag!=tag:
                     raise RuntimeError(f'board/reference mismatch: {size} bytes, decrypt={direction}')
-                if response.execution_cycles!=59+8*(size//16):
+                if response.execution_cycles!=27+8*(ad_size//16+1 if ad_size else 0)+8*(size//16):
                     raise RuntimeError('missing or wrong ASC4 execution timing')
-                results.append({'bytes':size,'decrypt':direction,'cycles':response.execution_cycles,
+                results.append({'ad_bytes':ad_size,'bytes':size,'decrypt':direction,'cycles':response.execution_cycles,
                                 'nominal_execution_us':response.execution_cycles/100})
         changed=bytes([tag[0]^1])+tag[1:]
         try:transport.run(Request(key,nonce,ad,cipher,True,changed))

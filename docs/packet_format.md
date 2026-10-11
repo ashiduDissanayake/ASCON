@@ -30,14 +30,18 @@ abort/reset quiet recovery interval is mandatory.
 ## Bounded laboratory UART v4
 
 Use `ascon_basys3_bounded_top`. The request header and grant records have the
-same layout as v3, but AD must be exactly 48 bytes and payload must be 1–256
+same layout as v3, but AD can be 0–48 bytes and payload must be 1–256
 bytes. All bytes are loaded before the internal admission event. Hello type
-01 has count 04 and payload `ASC4 || 256_LE32 || 00 || 48_LE32 || 000000`.
+01 has count 04 and payload `ASC4 || 256_LE32 || 00 || 48_LE32 || 01 || 0000`.
 The zero flag means plaintext is buffered until successful authentication.
+Hello payload byte 13 is 01 for variable AD (0–48 bytes); older ASC4
+firmware uses 00 there and requires exactly 48 bytes. Bytes 14–15 are zero.
+Empty AD sends no AD grant; a partial final AD grant requests only the remaining bytes.
 
 After a successful authentication/tag decision, type 15 count 08 carries
 `elapsed_cycles_LE32 || clock_hz_LE32 || eight_zero_bytes`. For this build,
-the reported clock is 100000000 and cycles are `59 + 8*floor(payload_bytes/16)`.
+the reported clock is 100000000 and cycles are `27 + 8*ad_rounds + 8*floor(payload_bytes/16)`,
+where `ad_rounds = 0` for empty AD, otherwise `floor(AD_bytes/16) + 1`.
 Ciphertext (type 12) or authenticated plaintext (type 14) follows, then the
 final tag (type 13). Failed authentication emits error 03 with no data/timing
 records. Error 05 means execution deadline fault and also releases no data.

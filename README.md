@@ -59,7 +59,7 @@ Requires [Icarus Verilog](http://iverilog.icarus.com/) (`iverilog`/`vvp`) and Py
 
 ## Buffered execution at the two-microsecond target
 
-The optional UART v4 top, `ascon_basys3_bounded_top`, buffers exactly 48 AD bytes
+The optional UART v4 top, `ascon_basys3_bounded_top`, buffers 0–48 AD bytes
 and 1–256 payload bytes before admission. Its measured worst RTL latency is
 187 cycles (nominally 1.87 us at 100 MHz), including the authentication decision.
 It withholds plaintext until authentication succeeds. Post-route timing and

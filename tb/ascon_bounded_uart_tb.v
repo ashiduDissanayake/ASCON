@@ -16,7 +16,7 @@ module ascon_bounded_uart_tb;
         cycle=cycle+1;
         if(dut.u_protocol.u_buffer.core_start)accepted_cycle=cycle;
         if(dut.u_protocol.u_buffer.response_valid &&
-           dut.u_protocol.u_buffer.elapsed_cycles!=59+8*(dut.u_protocol.pc_length/16))
+           dut.u_protocol.u_buffer.elapsed_cycles!=27+8*(dut.u_protocol.ad_length==0 ? 0:dut.u_protocol.ad_length/16+1)+8*(dut.u_protocol.pc_length/16))
             $fatal(1,"wrong physical integration cycle count");
     end
     task send_byte;
@@ -64,36 +64,36 @@ module ascon_bounded_uart_tb;
             rc=$fscanf(f,"%d",dir);
             if(rc==1)begin
                 rc=$fscanf(f,"%h %h %d",rk,rn,a);
-                for(j=0;j<3;j=j+1)rc=$fscanf(f,"%h",ads[j]);
+                for(j=0;j<(a+15)/16;j=j+1)rc=$fscanf(f,"%h",ads[j]);
                 rc=$fscanf(f,"%d",m);
                 for(j=0;j<(m+15)/16;j=j+1)rc=$fscanf(f,"%h",inputs[j]);
                 rc=$fscanf(f,"%h",rt);
                 for(j=0;j<(m+15)/16;j=j+1)rc=$fscanf(f,"%h",outputs[j]);
                 rc=$fscanf(f,"%h %d",et,ok);
-                if((!QUICK && (m==1 || m==16 || m==17 || m==128 || m==256)) ||
-                   (QUICK && m==256 && checked<3))begin
+                if((!QUICK && (a==0 || a==1 || a==15 || a==16 || a==17 || a==31 || a==32 || a==33 || a==47 || a==48) && (m==1 || m==16 || m==17 || m==128 || m==256)) ||
+                   (QUICK && m==256 && ((a==48 && checked<3) || (a==0 && checked<6) || (a==17 && checked<9))))begin
                     send_header(a,m);get_record;
                     if(record_bytes[1]!=1 || record_bytes[2]!=4 ||
                        {record_bytes[6],record_bytes[5],record_bytes[4],record_bytes[3]}!==32'h34435341 ||
                        {record_bytes[10],record_bytes[9],record_bytes[8],record_bytes[7]}!==256 ||
-                       record_bytes[11]!=0 || record_bytes[12]!=48)$fatal(1,"bad ASC4 capability");
+                       record_bytes[11]!=0 || record_bytes[12]!=48 || record_bytes[16]!=1)$fatal(1,"bad ASC4 capability");
                     ad_offset=0;pc_offset=0;out_offset=0;finished=0;timing_seen=0;
                     while(!finished)begin
                         get_record;
                         case(record_bytes[1])
                             8'h10:begin
-                                if(record_bytes[2]!=16 || ad_offset>=48 || pc_offset)$fatal(1,"AD grant");
-                                for(i=0;i<16;i=i+1)send_byte(ads[ad_offset/16][8*i+:8]);
-                                ad_offset=ad_offset+16;
+                                if(record_bytes[2]!=(a-ad_offset>=16 ? 16:a-ad_offset) || ad_offset>=a || pc_offset)$fatal(1,"AD grant");
+                                for(i=0;i<record_bytes[2];i=i+1)send_byte(ads[ad_offset/16][8*i+:8]);
+                                ad_offset=ad_offset+record_bytes[2];
                             end
                             8'h11:begin
-                                if(ad_offset!=48 || record_bytes[2]!=(m-pc_offset>=16 ? 16:m-pc_offset))$fatal(1,"payload grant");
+                                if(ad_offset!=a || record_bytes[2]!=(m-pc_offset>=16 ? 16:m-pc_offset))$fatal(1,"payload grant");
                                 for(i=0;i<record_bytes[2];i=i+1)send_byte(inputs[pc_offset/16][8*i+:8]);
                                 pc_offset=pc_offset+record_bytes[2];
                             end
                             8'h15:begin
                                 if(!ok || timing_seen || pc_offset!=m || record_bytes[2]!=8 ||
-                                   {record_bytes[6],record_bytes[5],record_bytes[4],record_bytes[3]}!=59+8*(m/16) ||
+                                   {record_bytes[6],record_bytes[5],record_bytes[4],record_bytes[3]}!=27+8*(a==0 ? 0:a/16+1)+8*(m/16) ||
                                    {record_bytes[10],record_bytes[9],record_bytes[8],record_bytes[7]}!=100_000_000)$fatal(1,"timing record");
                                 timing_seen=1;
                             end
@@ -130,12 +130,15 @@ module ascon_bounded_uart_tb;
         send_header(48,257);get_record;
         if(record_bytes[1]!=8'h7F || record_bytes[2]!=2)$fatal(1,"invalid length admitted");
         repeat(25000)@(negedge clk);
-        send_header(48,16);get_record;
+        send_header(49,16);get_record;
+        if(record_bytes[1]!=8'h7F || record_bytes[2]!=2)$fatal(1,"invalid AD length admitted");
+        repeat(25000)@(negedge clk);
+        send_header(0,16);get_record;
         if(record_bytes[1]!=1 || record_bytes[2]!=4)$fatal(1,"recovery did not accept next header");
         reset=1;repeat(3)@(negedge clk);reset=0;repeat(3)@(negedge clk);
         if(dut.u_protocol.u_buffer.pc_valid_out || dut.u_protocol.execution_busy)$fatal(1,"reset stale output");
         $display("ALL PASS: %0d serial-pin cases, timing records and authentication-gated output",checked);
         $finish;
     end
-    initial begin #(QUICK ? 2000000000 : 100000000);$fatal(1,"UART suite watchdog");end
+    initial begin #2000000000;$fatal(1,"UART suite watchdog");end
 endmodule

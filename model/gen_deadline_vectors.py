@@ -19,7 +19,7 @@ def cases(rng,a,m,negative=False):
     yield record(0,key,nonce,ad,pt,bytes(16),ct,tag,1)
     yield record(1,key,nonce,ad,ct,tag,pt,tag,1)
     if negative:
-        flip=lambda b: bytes([b[0]^1])+b[1:]
+        flip=lambda b: bytes([b[0]^1])+b[1:] if b else b'\x01'
         for kk,nn,aa,cc,tt in [(key,nonce,ad,ct,flip(tag)),
                                (flip(key),nonce,ad,ct,tag),
                                (key,flip(nonce),ad,ct,tag),
@@ -36,7 +36,10 @@ def main():
     with (target/'bounded_cases.vec').open('w') as stream:
         for m in range(1,257):
             for line in cases(rng,48,m,True):stream.write(line);count+=1
-    print(f'Generated {count} buffered cases: every length 1..256, both directions, five tampering classes.')
+        for a in range(48):
+            for m in [1,15,16,17,128,255,256]:
+                for line in cases(rng,a,m,True):stream.write(line);count+=1
+    print(f'Generated {count} buffered cases: every AD length 0..48 and payload length 1..256, both directions, five tampering classes.')
     lengths=list(range(34))+[48,64,127,128,129,143,144,145,159,160,255,256]
     count=0
     with (target/'fast_cases.vec').open('w') as stream:

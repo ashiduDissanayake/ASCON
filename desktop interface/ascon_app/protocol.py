@@ -82,7 +82,7 @@ def decode_record(raw):
     if kind == 0x7F:
         errors = {
             1: 'FPGA rejected the command. Program the UART v3 streaming bitstream.',
-            2: 'FPGA rejected the length profile. ASC4 needs exactly 48 AD bytes and 1–256 payload bytes; ASC3 allows 0–8192 bytes each.',
+            2: 'FPGA rejected the length profile. Updated ASC4 supports 0–48 AD bytes and 1–256 payload bytes; older ASC4 requires exactly 48 AD bytes. Rebuild and program the updated bitstream for variable AD. ASC3 allows 0–8192 bytes each.',
             3: 'Authentication failed. Provisional plaintext discarded; no result accepted.',
             4: 'FPGA receive timeout. Transaction aborted. Reset before reconnecting.',
             5: 'FPGA execution deadline fault. No output was released.',

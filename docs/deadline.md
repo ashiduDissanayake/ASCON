@@ -2,7 +2,9 @@
 
 ## Status
 
-Implemented and verified in RTL simulation and bounded formal checks. Post-route
+The original fixed-48-byte profile was verified in RTL simulation and bounded
+formal checks. The variable-AD extension updates the formal harness; rerunning
+formal proof and FPGA implementation is required for renewed signoff. Post-route
 100 MHz timing and a Basys 3 board measurement are **not yet verified**. The old
 `timing_1.rpx` belongs to an earlier implementation and cannot sign off this RTL.
 The new absorption/input-mux path can be longer than the old critical path;
@@ -10,24 +12,25 @@ the 100 MHz route must pass before claiming a physical two-microsecond guarantee
 
 ## Exact contract
 
-UART v4 (`ASC4`) admits **exactly 48 AD bytes and 1–256 payload bytes**.
+UART v4 (`ASC4`) admits **0–48 AD bytes and 1–256 payload bytes**.
 Encryption and decryption use the same schedule. Load the entire input into
 the FPGA, then accept `admit_valid && admit_ready`. The finish event is the
 first assertion of `response_valid`, containing the final authentication/tag
 decision. Loading, waiting for admission, response consumption and output
 transfer are outside this interval. There is one transaction slot and no queue.
 
-For payload length M bytes:
+For AD length A and payload length M bytes:
 
 ```
-core cycles = 58 + 8 * floor(M / 16)
-admission-to-decision cycles = 59 + 8 * floor(M / 16)
+ad_rounds = 0 if A == 0 else floor(A / 16) + 1
+core cycles = 26 + 8 * ad_rounds + 8 * floor(M / 16)
+admission-to-decision cycles = 27 + 8 * ad_rounds + 8 * floor(M / 16)
 ```
 
 The maximum is **187 cycles**, nominally **1.87 us at 100 MHz**. This is a full
 AEAD operation including initialization, AD, payload, padding, finalization and
 authentication comparison. It is not a per-round or first-output measurement.
-At 128 bytes the decision takes 123 cycles; at 256 bytes it takes 187.
+With 48 AD bytes, at 128 payload bytes the decision takes 123 cycles; at 256 bytes it takes 187.
 Count elapsed rising-edge intervals, not both endpoint edges inclusively.
 
 The buffer feeds all input beats and accepts all output beats internally.
@@ -75,7 +78,24 @@ make bounded_uart_nominal
 make formal_deadline
 ```
 
-Observed in this change:
+Variable-AD extension checks with Vivado Simulator 2018.1:
+
+- 4144 buffered reference cases passed, covering all AD lengths 0–48,
+  all payload lengths 1–256, both directions and authentication failures.
+- 350 accelerated serial-pin cases passed, including empty/partial AD,
+  timing records, over-limit rejection and recovery.
+- Nine nominal-115200-baud serial-pin cases passed with 0, 17 and 48 AD bytes
+  (encryption, valid decryption and bad-tag rejection).
+- Eight Python host transport tests passed, including old ASC4 compatibility.
+- Maximum simulated admission-to-decision latency remains 187 cycles.
+- Formal harnesses were updated but not rerun (Yosys unavailable).
+- The local bitstream build stopped before synthesis because Vivado could not
+  open `build/vivado/ascon_basys3_bounded_top/build_metadata.txt`; absolute,
+  short-path and relative repository paths were tried. No new bitstream or
+  post-route timing result was produced, and the board was not reprogrammed.
+
+Historical results for the original fixed-48-byte profile (not a new formal
+or physical signoff for the variable-AD extension):
 
 | Check | Result |
 |---|---|
@@ -118,10 +138,12 @@ visual indicators. The declared 100 ps input jitter budget needs board-source
 qualification. Constraint endpoint mismatches fail the build.
 
 Program the **new bounded bitstream**, press btnC, and use the updated desktop
-console with 48 AD bytes and 1–256 payload bytes. For a hex example, AD can be
+console with 0–48 AD bytes and 1–256 payload bytes. For a hex example, AD can be
 `00 01 ... 2f`; use a fresh nonce for each encryption. The console auto-detects
 ASC3/ASC4 and displays FPGA service microseconds separately from host round trip.
-The usual five-byte default AD example belongs to v3 and will be rejected by v4.
+The five-byte default AD example is accepted by the updated v4 firmware.
+Select **Use empty AD** for zero bytes; a blank field alone uses the default.
+Existing programmed ASC4 images still require 48 bytes until rebuilt and reprogrammed.
 For an automated board check after programming, install the desktop requirements
 and run `python3 tools/check_bounded_board.py --port COM4` (use the real serial
 port). It compares board output against the independent reference at five

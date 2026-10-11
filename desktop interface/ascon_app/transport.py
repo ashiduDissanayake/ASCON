@@ -52,8 +52,14 @@ def exchange_stream(stream, request, timeout=TIMEOUT):
     bounded = payload[:4] == b'ASC4'
     maximum = int.from_bytes(payload[4:8], 'little')
     if bounded:
-        if maximum != 256 or payload[8:] != b'\0'+(48).to_bytes(4,'little')+b'\0'*3 or len(request.ad)!=48 or not 1<=len(request.plaintext)<=256:
-            raise ProtocolError('ASC4 requires exactly 48 AD bytes and 1–256 payload bytes.')
+        variable_ad = payload[13] == 1
+        if (maximum != 256 or payload[8:13] != b'\0'+(48).to_bytes(4,'little')
+                or payload[13] not in (0, 1) or any(payload[14:])):
+            raise ProtocolError('Wrong ASC4 firmware capabilities.')
+        if not 1 <= len(request.plaintext) <= 256 or len(request.ad) > 48:
+            raise ProtocolError('ASC4 supports 0–48 AD bytes and 1–256 payload bytes.')
+        if not variable_ad and len(request.ad) != 48:
+            raise ProtocolError('This older ASC4 firmware requires 48 AD bytes. Rebuild and program the updated ASC4 bitstream for 0–48 AD bytes.')
     elif maximum < max(len(request.ad), len(request.plaintext)) or payload[8:] != b'\x01'+b'\0'*7:
         raise ProtocolError('Wrong ASC3 firmware capabilities.')
     ad_offset = data_offset = 0
@@ -104,7 +110,9 @@ def exchange_stream(stream, request, timeout=TIMEOUT):
                 raise ProtocolError('Malformed or misplaced execution timing record.')
             execution_cycles = int.from_bytes(payload[:4],'little')
             execution_clock_hz = int.from_bytes(payload[4:8],'little')
-            if execution_clock_hz!=100_000_000 or execution_cycles!=59+8*(len(request.plaintext)//16):
+            ad_rounds = len(request.ad)//16+1 if request.ad else 0
+            expected_cycles = 27+8*ad_rounds+8*(len(request.plaintext)//16)
+            if execution_clock_hz!=100_000_000 or execution_cycles!=expected_cycles:
                 raise ProtocolError('ASC4 execution timing differs from the declared 100 MHz schedule.')
         else:
             raise ProtocolError(f'Unexpected UART record type 0x{kind:02x}.')

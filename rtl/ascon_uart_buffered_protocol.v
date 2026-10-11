@@ -1,6 +1,6 @@
 `timescale 1ns/1ps
 // UART v4 preserves the header/grant records but buffers the complete packet.
-// ASC4 hello: AD exactly 48 bytes, payload 1..256, authenticated output only.
+// ASC4 hello: AD 0..48 bytes, payload 1..256, authenticated output only.
 module ascon_uart_buffered_protocol #(
     parameter integer CLK_FREQ_HZ=100_000_000,
     parameter integer RX_TIMEOUT_CYCLES=10_000_000
@@ -38,7 +38,7 @@ module ascon_uart_buffered_protocol #(
         .clk(clk),.rst_n(rst_n && !buffer_reset),
         .config_valid(phase==CONFIG),.config_ready(config_ready),
         .decrypt(command==8'h12),.key(key),.nonce(nonce),.tag_in(expected_tag),
-        .payload_len(pc_length[8:0]),
+        .payload_len(pc_length[8:0]),.ad_len(ad_length[5:0]),
         .ad_valid(phase==AD_HOLD),.ad_ready(ad_ready),.ad_data(input_buf),
         .pc_valid(phase==PC_HOLD),.pc_ready(pc_ready),.pc_data_in(input_buf),
         .admit_valid(phase==ADMIT),.admit_ready(admit_ready),.busy(),
@@ -93,16 +93,18 @@ module ascon_uart_buffered_protocol #(
                 CHECK:begin
                     if(command!=8'h11 && command!=8'h12)begin
                         buffer_reset<=1;send_record(8'h7F,8'h01,128'd0,RECOVER);
-                    end else if(ad_length!=48 || pc_length==0 || pc_length>256)begin
+                    end else if(ad_length>48 || pc_length==0 || pc_length>256)begin
                         buffer_reset<=1;send_record(8'h7F,8'h02,128'd0,RECOVER);
                     end else begin ad_left<=ad_length;pc_left<=pc_length;phase<=CONFIG;end
                 end
                 CONFIG:if(config_ready)phase<=HELLO;
-                HELLO:send_record(8'h01,8'd4,{24'd0,32'd48,8'd0,32'd256,32'h34435341},DISPATCH);
+                // Payload byte 13 advertises variable AD; old firmware used 0.
+                HELLO:send_record(8'h01,8'd4,{16'd0,8'd1,32'd48,8'd0,32'd256,32'h34435341},DISPATCH);
                 DISPATCH:begin
                     input_buf<=0;rx_index<=0;
                     if(ad_left!=0)begin
-                        chunk_count<=16;send_record(8'h10,8'd16,128'd0,RX_AD);
+                        chunk_count<=ad_left>=16 ? 16 : ad_left[4:0];
+                        send_record(8'h10,ad_left>=16 ? 8'd16 : ad_left[7:0],128'd0,RX_AD);
                     end else if(pc_left!=0)begin
                         chunk_count<=pc_left>=16 ? 16 : pc_left[4:0];
                         send_record(8'h11,pc_left>=16 ? 8'd16 : pc_left[7:0],128'd0,RX_PC);

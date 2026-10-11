@@ -1,7 +1,7 @@
 # Gateway requirements and timing contract
 
 Current implementation addition: the bounded laboratory UART v4 path supports
-48 AD bytes and 1–256 payload bytes with a proved maximum of 187 internal
+0–48 AD bytes and 1–256 payload bytes with a simulated maximum of 187 internal
 admission-to-decision cycles. FPGA route/board timing remains open. This does
 not complete the future secure gateway or its policy checks. See
 [deadline.md](deadline.md) for its exact scope and evidence.

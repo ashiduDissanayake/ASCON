@@ -9,6 +9,7 @@ module ascon_buffered (
     input wire decrypt,
     input wire [127:0] key, nonce, tag_in,
     input wire [8:0] payload_len,
+    input wire [5:0] ad_len,
     input wire ad_valid,
     output wire ad_ready,
     input wire [127:0] ad_data,
@@ -37,6 +38,8 @@ module ascon_buffered (
     reg [127:0] k, n, expected_tag;
     reg dec;
     reg [8:0] length;
+    reg [5:0] ad_length;
+    reg [1:0] ad_beats;
     reg [4:0] beats, pc_load, ad_feed, pc_feed, out_store, out_drain;
     reg [1:0] ad_load;
     reg [7:0] age;
@@ -47,7 +50,7 @@ module ascon_buffered (
     wire core_out_last;
     wire core_rst_n=rst_n && phase!=EMPTY && phase!=LOAD;
     assign config_ready=rst_n && phase==EMPTY;
-    assign ad_ready=rst_n && phase==LOAD && ad_load<3;
+    assign ad_ready=rst_n && phase==LOAD && ad_load<ad_beats;
     assign pc_ready=rst_n && phase==LOAD && pc_load<beats;
     assign admit_ready=rst_n && phase==READY;
     assign busy=phase!=EMPTY;
@@ -61,28 +64,29 @@ module ascon_buffered (
         (pc_last_out && length[3:0]!=0 ? {1'b0,length[3:0]} : 5'd16);
     ascon_controller_fast #(.LENGTH_BITS(9)) u_core (
         .clk(clk),.rst_n(core_rst_n),.start(core_start),.decrypt(dec),
-        .key(k),.nonce(n),.tag_in(expected_tag),.ad_len(32'd48),
+        .key(k),.nonce(n),.tag_in(expected_tag),.ad_len({26'd0,ad_length}),
         .pc_len({23'd0,length}),.busy(),.done(core_done),.auth_ok(core_auth),
         .tag_out(core_tag),.ad_ready(core_ad_ready),
-        .ad_valid(phase==RUN && ad_feed<3),
-        .ad_data(ad_feed<3 ? ad_mem[ad_feed] : 128'd0),
+        .ad_valid(phase==RUN && ad_feed<ad_beats),
+        .ad_data(ad_feed<ad_beats ? ad_mem[ad_feed] : 128'd0),
         .pc_ready(core_pc_ready),.pc_valid(phase==RUN && pc_feed<beats),
         .pc_data_in(pc_feed<16 ? input_mem[pc_feed] : 128'd0),
         .pc_valid_out(core_out_valid),.pc_ready_in(phase==RUN && out_store<beats),
         .pc_data_out(core_out),.pc_bytes_out(core_out_bytes),.pc_last_out(core_out_last));
     always @(posedge clk or negedge rst_n) begin
         if(!rst_n) begin
-            phase<=EMPTY;k<=0;n<=0;expected_tag<=0;dec<=0;length<=0;
+            phase<=EMPTY;k<=0;n<=0;expected_tag<=0;dec<=0;length<=0;ad_length<=0;ad_beats<=0;
             beats<=0;pc_load<=0;ad_load<=0;ad_feed<=0;pc_feed<=0;
             out_store<=0;out_drain<=0;age<=0;elapsed_cycles<=0;
             auth_ok<=0;error_code<=0;tag_out<=0;
         end else case(phase)
             EMPTY: if(config_valid && config_ready) begin
                 auth_ok<=0;error_code<=0;tag_out<=0;elapsed_cycles<=0;
-                if(payload_len==0 || payload_len>256) begin
+                if(ad_len>48 || payload_len==0 || payload_len>256) begin
                     error_code<=2;phase<=RESPONSE;
                 end else begin
                     k<=key;n<=nonce;expected_tag<=tag_in;dec<=decrypt;
+                    ad_length<=ad_len;ad_beats<=(ad_len+6'd15)>>4;
                     length<=payload_len;beats<=(payload_len+9'd15)>>4;
                     pc_load<=0;ad_load<=0;phase<=LOAD;
                 end
@@ -90,14 +94,14 @@ module ascon_buffered (
             LOAD: begin
                 if(ad_valid && ad_ready) begin ad_mem[ad_load]<=ad_data;ad_load<=ad_load+1'b1;end
                 if(pc_valid && pc_ready) begin input_mem[pc_load]<=pc_data_in;pc_load<=pc_load+1'b1;end
-                if(ad_load==3 && pc_load==beats) phase<=READY;
+                if(ad_load==ad_beats && pc_load==beats) phase<=READY;
             end
             READY: if(core_start) begin
                 age<=0;ad_feed<=0;pc_feed<=0;out_store<=0;out_drain<=0;phase<=RUN;
             end
             RUN: begin
                 age<=age+1'b1;
-                if(core_ad_ready && ad_feed<3) ad_feed<=ad_feed+1'b1;
+                if(core_ad_ready && ad_feed<ad_beats) ad_feed<=ad_feed+1'b1;
                 if(core_pc_ready && pc_feed<beats) pc_feed<=pc_feed+1'b1;
                 if(core_out_valid && out_store<beats) begin
                     output_mem[out_store]<=core_out;out_store<=out_store+1'b1;
