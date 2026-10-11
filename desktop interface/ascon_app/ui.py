@@ -1,10 +1,12 @@
 """Tkinter view/controller. Packet and serial logic live in separate modules."""
 import queue
+import json
 import threading
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog, font
 from .protocol import (DEFAULT_KEY, DEFAULT_AD, DEFAULT_PLAINTEXT, DEFAULT_NONCE,
-                       DEFAULT_CT, DEFAULT_TAG, make_request, new_nonce)
+                       DEFAULT_CT, DEFAULT_TAG, make_request, new_nonce, parse_hex)
+from .messages import MessageDecryptRequest, validate_envelope
 from .transport import SerialTransport, DemoTransport, list_ports
 from .service import run_operation, save_result
 
@@ -15,7 +17,7 @@ class App(tk.Tk):
         families = {name.lower() for name in font.families(self)}
         self.ui_font = 'Segoe UI' if 'segoe ui' in families else 'Helvetica'
         self.code_font = 'Consolas' if 'consolas' in families else 'Courier'
-        self.title('ASCON | Streaming UART v3')
+        self.title('ASCON | UART v3 / v4')
         width = min(1120, max(400, self.winfo_screenwidth() - 100))
         height = min(760, max(350, self.winfo_screenheight() - 150))
         self.geometry(f'{width}x{height}')
@@ -139,12 +141,13 @@ class App(tk.Tk):
         file_actions.grid(row=16, column=0, sticky='ew', pady=(10, 0))
         self._track_widget(ttk.Button(file_actions, text='Load AD file', command=lambda: self._load_file(True))).pack(side='left')
         self._track_widget(ttk.Button(file_actions, text='Load data file', command=lambda: self._load_file(False))).pack(side='right')
+        self._track_widget(ttk.Button(left, text='Import encrypted message JSON', command=self._import_message)).grid(row=19, column=0, sticky='w', pady=(7, 0))
         actions = ttk.Frame(left)
         actions.grid(row=17, column=0, sticky='ew', pady=(12, 0))
         self.send_button = ttk.Button(actions, text='Send & encrypt', style='Accent.TButton', command=self._send, state='disabled')
         self.send_button.pack(side='left')
         self._track_widget(ttk.Button(actions, text='Load defaults', command=self._defaults)).pack(side='right')
-        ttk.Label(left, text='Blank fields use defaults. Tick "Use empty" for zero bytes.\nThe example key is for lab testing.', font=(self.ui_font, 9)).grid(row=18, column=0, sticky='w', pady=(9, 0))
+        ttk.Label(left, text='Messages above 256 bytes are split automatically (up to 8192 bytes).\nChunked messages use fresh nonces and one tag per chunk.\nBlank fields use defaults; tick "Use empty" for zero bytes.', font=(self.ui_font, 9)).grid(row=18, column=0, sticky='w', pady=(9, 0))
         result_header = ttk.Frame(right)
         result_header.pack(fill='x', pady=(0, 10))
         self.auth_badge = ttk.Label(result_header, textvariable=self.auth_status, style='Neutral.TLabel')
@@ -169,7 +172,7 @@ class App(tk.Tk):
         self.copy_button.pack(side='right')
         self.decrypt_result_button = ttk.Button(right, text='Load this result for decryption', command=self._load_decrypt, state='disabled')
         self.decrypt_result_button.pack(anchor='w', pady=(9, 0))
-        ttk.Label(right, text='Export contains ciphertext, nonce, AD and tag.\nThe key and plaintext are not exported.', font=(self.ui_font, 9)).pack(anchor='w', pady=(10, 0))
+        ttk.Label(right, text='Export includes the nonces, AD and tags needed for decryption.\nKeep the full JSON for chunked messages. Key and plaintext are excluded.', font=(self.ui_font, 9)).pack(anchor='w', pady=(10, 0))
         self._install_scroll_bindings(self.main_frame)
         self.after_idle(lambda: self._layout_viewport())
 
@@ -342,18 +345,25 @@ class App(tk.Tk):
     def _send(self):
         decrypt = self.operation.get() != 'Encrypt'
         try:
-            nonce = new_nonce() if self.auto_nonce.get() and not decrypt else self.nonce.get()
-            request = make_request(self.key.get(), nonce, self.ad.get(), self.data.get(),
-                                   self.encoding.get(), self.empty_ad.get(), self.empty_data.get(), decrypt, self.tag.get())
+            if decrypt and self.data.get().lstrip().startswith('{'):
+                key = parse_hex(self.key.get().strip() or DEFAULT_KEY, 'Key')
+                envelope = json.loads(self.data.get())
+                request = MessageDecryptRequest(key, envelope)
+                validate_envelope(envelope, key)
+            else:
+                nonce = new_nonce() if self.auto_nonce.get() and not decrypt else self.nonce.get()
+                request = make_request(self.key.get(), nonce, self.ad.get(), self.data.get(),
+                                       self.encoding.get(), self.empty_ad.get(), self.empty_data.get(), decrypt, self.tag.get())
         except ValueError as exc:
             messagebox.showerror('Check inputs', str(exc))
             return
         self.key.set(request.key.hex())
-        self.nonce.set(request.nonce.hex())
-        self.ad.set(request.ad.hex() if self.encoding.get() == 'Hex bytes' else request.ad.decode('utf-8'))
-        self.data.set(request.plaintext.hex() if decrypt or self.encoding.get() == 'Hex bytes' else request.plaintext.decode('utf-8'))
-        if decrypt:
-            self.tag.set(request.tag.hex())
+        if not isinstance(request, MessageDecryptRequest):
+            self.nonce.set(request.nonce.hex())
+            self.ad.set(request.ad.hex() if self.encoding.get() == 'Hex bytes' else request.ad.decode('utf-8'))
+            self.data.set(request.plaintext.hex() if decrypt or self.encoding.get() == 'Hex bytes' else request.plaintext.decode('utf-8'))
+            if decrypt:
+                self.tag.set(request.tag.hex())
         self.last_request = request
         self.result = None
         self.round_trip.set('Round trip: —')
@@ -364,7 +374,8 @@ class App(tk.Tk):
         transport, source = self.transport, self.source
         def transact():
             try:
-                return run_operation(transport, request, source)
+                return run_operation(transport, request, source,
+                                     lambda done, total: self.events.put(('progress', (done, total), None)))
             except Exception:
                 transport.close()
                 raise
@@ -374,6 +385,11 @@ class App(tk.Tk):
         try:
             kind, value, error = self.events.get_nowait()
         except queue.Empty:
+            self.after(60, self._poll)
+            return
+        if kind == 'progress':
+            done, total = value
+            self.status.set(f'Processed chunk {done}/{total}; waiting for complete message verification.')
             self.after(60, self._poll)
             return
         self.pending = False
@@ -405,7 +421,16 @@ class App(tk.Tk):
                     text += 'PLAINTEXT (UTF-8)\n' + bytes.fromhex(data).decode('utf-8') + '\n\n'
                 except UnicodeDecodeError:
                     text += 'Plaintext is binary; view the hex above.\n\n'
-            text += f"TAG (hex)\n{value['tag_hex']}\n\nNONCE USED\n{value['nonce_hex']}\n\nAD (hex)\n{value['associated_data_hex']}\n\nINPUT: {value['plaintext_bytes']} bytes"
+            if 'message' in value:
+                text += f"CHUNKS: {value['chunk_count']} (separate nonce and tag per chunk)\n"
+                text += 'Export the full JSON or load this result for decryption.\n'
+                if value.get('total_execution_us') is not None:
+                    text += f"\nTOTAL FPGA EXECUTION: {value['total_execution_us']:.2f} µs\n"
+                    text += 'PER CHUNK (µs): ' + ', '.join(f'{t:.2f}' for t in value['chunk_execution_us']) + '\n'
+                self.nonce.set(value['nonce_hex'])
+            else:
+                text += f"TAG (hex)\n{value['tag_hex']}\n\nNONCE USED\n{value['nonce_hex']}\n"
+            text += f"\nAD (hex)\n{value['associated_data_hex']}\n\nINPUT: {value['plaintext_bytes']} bytes"
             if value.get('execution_us') is not None:
                 text += (f"\n\nFPGA EXECUTION\n{value['execution_us']:.2f} µs "
                          f"({value['execution_cycles']} cycles at {value['execution_clock_hz']/1_000_000:g} MHz)"
@@ -428,6 +453,9 @@ class App(tk.Tk):
         self._defaults()
         self.encoding.set('Hex bytes')
         self.key.set(request.key.hex())
+        if 'message' in result:
+            self._set_message_input(result['message'])
+            return
         self.nonce.set(result['nonce_hex'])
         self.ad.set(result['associated_data_hex'])
         self.data.set(result['ciphertext_hex'])
@@ -435,6 +463,39 @@ class App(tk.Tk):
         self.empty_ad.set(not request.ad)
         self.empty_data.set(not request.plaintext)
         self.status.set('Previous encryption loaded. Send to verify and recover the plaintext.')
+
+    def _set_message_input(self, envelope):
+        self.operation.set('Decrypt + verify')
+        self.encoding.set('Hex bytes')
+        self.auto_nonce.set(False)
+        self.empty_ad.set(False)
+        self.empty_data.set(False)
+        self.data.set(json.dumps(envelope, separators=(',', ':')))
+        self.ad.set(envelope['associated_data_hex'])
+        self.nonce.set(envelope['base_nonce_hex'])
+        self.tag.set('')
+        self.data_label.configure(text='Encrypted message JSON | includes all chunk tags')
+        self.send_button.configure(text='Send & decrypt')
+        self.status.set('Chunked message loaded. Enter its key, then send to verify all chunks.')
+        self._states()
+
+    def _import_message(self):
+        path = filedialog.askopenfilename(title='Import encrypted message', filetypes=[('JSON result', '*.json')])
+        if not path:
+            return
+        try:
+            with open(path, encoding='utf-8') as stream:
+                raw = stream.read(1_000_001)
+            if len(raw) > 1_000_000:
+                raise ValueError('Message JSON exceeds the import limit.')
+            value = json.loads(raw)
+            if not isinstance(value, dict):
+                raise ValueError('Expected an encrypted message JSON object.')
+            envelope = value.get('message', value)
+            validate_envelope(envelope, parse_hex(self.key.get().strip() or DEFAULT_KEY, 'Key'))
+            self._set_message_input(envelope)
+        except (OSError, ValueError) as exc:
+            messagebox.showerror('Import failed', str(exc))
 
     def _export(self):
         path = filedialog.asksaveasfilename(defaultextension='.json', initialfile='ascon_result.json', filetypes=[('JSON result', '*.json')])
