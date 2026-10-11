@@ -79,3 +79,12 @@ For a Vivado-based flow instead of Icarus, add `rtl/` as design sources
 and `tb/` as simulation sources, and copy `vectors/` into Vivado's
 simulation sandbox directory (`<project>.sim/sim_1/behav/xsim/`) since
 Vivado runs simulations from there rather than the repo root.
+
+## Host large-message layer
+
+The desktop service automatically frames payloads above 256 bytes into separate
+AEAD operations, without changing the FPGA datapath or UART ABI. Each chunk has
+authenticated ordering/length metadata, a fresh-message nonce range and its own
+tag. The receiver validates all chunks before returning the complete plaintext.
+See [chunked messages](chunked_messages.md) for the versioned format, GUI import
+and export, compatibility, and timing semantics.

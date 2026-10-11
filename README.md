@@ -57,6 +57,19 @@ the comment at the top of `scripts/build_vivado.tcl`.
 
 Requires [Icarus Verilog](http://iverilog.icarus.com/) (`iverilog`/`vvp`) and Python 3.
 
+## Desktop large messages
+
+The desktop console automatically splits 257–8192-byte encryption inputs into
+authenticated operations of at most 256 bytes each. Export/import the full JSON
+to decrypt and reassemble the message; every chunk has its own nonce and tag.
+Plaintext is shown only after all chunks verify. Inputs up to 256 bytes retain
+the existing single-operation behavior. No FPGA bitstream change is needed.
+See [the message format and GUI workflow](docs/chunked_messages.md).
+
+```sh
+python -m unittest discover -s tests -v
+```
+
 ## Buffered execution at the two-microsecond target
 
 The optional UART v4 top, `ascon_basys3_bounded_top`, buffers 0–48 AD bytes
